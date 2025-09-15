@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routes_api import router as api_router
 from .routes_redirect import router as redirect_router
 from .routes_agent import router as agent_router
+from .routes_analytics import router as analytics_router
 
 
 load_dotenv()
@@ -35,5 +36,6 @@ def healthz():
 app.include_router(api_router)
 app.include_router(redirect_router)
 app.include_router(agent_router)
+app.include_router(analytics_router)
 
 

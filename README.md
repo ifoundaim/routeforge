@@ -32,15 +32,36 @@ Env flags:
 4. Decision: `review` vs `published`/`dry_run`.
 5. On publish, create `release`, compute optional embedding, and mint `route`.
 
-### Smoke Tests
-
-Run the stack:
-
-```bash
-make migrate && make seed && make run
+#### ASCII Data Flow
+```
+[Agent / client] --POST /agent/publish--> [API]
+      |                                      |
+      |                               ingest staging
+      v                                      v
+[releases_staging]                      [audit: ingest]
+      |                                      |
+      |--- search (embedding? fulltext?) ---> [similar releases]
+      |                                      |
+ decision: review <-- score>=threshold? -- yes
+      |
+     no
+      v
+[create release] -- optional embedding --> [releases]
+      |                                      |
+      v                                      v
+[audit: publish]                        [mint route]
+      |                                      |
+      v                                      v
+[route] <----------- slug minted ---------- [routes]
+      |
+      v
+GET /r/{slug} --> 302 --> target_url
+      |
+      v
+[route_hits] --count--> GET /api/routes/{id}/hits => {"count": N}
 ```
 
-Then in another terminal:
+### cURL Validation Pack (Agent)
 
 ```bash
 API="http://localhost:${PORT:-8000}"
@@ -67,31 +88,40 @@ curl -s -X POST "$API/agent/publish" -H 'Content-Type: application/json' \
 
 Minimal-but-real demo backend for an IP registry → releases → short distribution redirects with TiDB persistence.
 
-## Quickstart
+## Quickstart (5 steps)
 
-1. Create a `.env` from sample and set your TiDB DSN:
+1. Environment
    ```bash
-   cp .env.sample .env
-   # edit .env and set TIDB_DSN
+   # Create .env with your DSN (example shown)
+   cat > .env << 'EOF'
+   TIDB_DSN=mysql+pymysql://user:password@host:4000/routeforge
+   # Optional
+   # PORT=8000
+   # LOG_LEVEL=INFO
+   # EMBEDDING_ENABLED=0
+   # SIMILARITY_THRESHOLD=0.83
+   EOF
    ```
-2. Install dependencies (Python 3.11):
+2. Install deps (Python 3.11)
    ```bash
    pip install -r requirements.txt
    ```
-3. Run migrations (create tables):
+3. Migrate (create tables)
    ```bash
    make migrate
    ```
-4. Seed demo data:
+4. Seed demo data
    ```bash
    make seed
    ```
-5. Run the server:
+5. Run and basic curl
    ```bash
    make run
+   # In another shell
+   curl -s http://localhost:${PORT:-8000}/healthz | jq .
    ```
 
-Server runs on `http://localhost:${PORT:-8000}`.
+Server runs on `http://localhost:${PORT:-8000}`. See `docs/quickstart.md` for a more detailed walk-through.
 
 ## Environment
 
@@ -108,7 +138,7 @@ Server runs on `http://localhost:${PORT:-8000}`.
 - `GET /api/releases/{id}` → release with project + latest bound route
 - `GET /api/routes/{id}/hits` → `{ "count": N }`
 
-## cURL validation
+## cURL Validation Pack (API)
 
 ```bash
 # Health
@@ -147,3 +177,21 @@ curl -s http://localhost:8000/api/routes/$ROUTE_ID/hits | jq .
 - CORS is open to all origins for demo purposes.
 - Error shape is `{ "error": "message" }`.
 - Redirect logs basic info to stdout.
+
+## Troubleshooting
+
+- Port already in use: set `PORT=8001` (or any free port) before `make run`.
+- DSN format: `mysql+pymysql://user:password@host:4000/dbname`. Ensure database exists and user has DDL rights for migrations.
+- TLS/SSL to TiDB or MySQL:
+  - Prefer your provider's TLS-enabled endpoint. Most servers negotiate TLS automatically when required.
+  - If you see certificate errors, install the provider CA in your OS trust store or use their "public" endpoint that bundles CA trust.
+  - If your provider requires explicit TLS, use their recommended DSN parameters for PyMySQL/SQLAlchemy.
+- Vector/FULLTEXT features: If your cluster lacks VECTOR or FULLTEXT, migrations fall back automatically. Searching will still work via LIKE if needed.
+- Embeddings off by default: set `EMBEDDING_ENABLED=1` to enable vector search and `SIMILARITY_THRESHOLD` to tune review sensitivity.
+
+## Docs
+
+- Quickstart: `docs/quickstart.md`
+- Data Flow: `docs/data-flow.md`
+- Validation Pack: `docs/validation-pack.md`
+- Troubleshooting: `docs/troubleshooting.md`
