@@ -87,9 +87,8 @@ def execute_scalar(sql: str, **params: Any) -> Any:
     """
     _ensure_engine_and_session()
     with _engine.connect() as conn:
-        result = conn.execute(
-            conn.exec_driver_sql(sql),
-        ) if not params else conn.execute(conn.exec_driver_sql(sql), params)
+        # Use exec_driver_sql directly (SQLAlchemy 2.x) and fetch one row
+        result = conn.exec_driver_sql(sql, params) if params else conn.exec_driver_sql(sql)
         row = result.fetchone()
         return row[0] if row is not None and len(row) > 0 else None
 

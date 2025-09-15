@@ -121,7 +121,7 @@ Minimal-but-real demo backend for an IP registry → releases → short distribu
    curl -s http://localhost:${PORT:-8000}/healthz | jq .
    ```
 
-Server runs on `http://localhost:${PORT:-8000}`. See `docs/quickstart.md` for a more detailed walk-through.
+Server runs on `http://localhost:${PORT:-8000}`. For the dev smoke setup we use `PORT=4000` so that frontend proxy and cURL examples hit `4000`.
 
 ## Environment
 

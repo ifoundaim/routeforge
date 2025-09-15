@@ -23,6 +23,7 @@ type ProjectOut = { id: number; name: string; owner: string; description?: strin
 type ReleaseOut = { id: number; project_id: number; version: string; notes?: string | null; artifact_url: string; created_at: string }
 type ReleaseDetailOut = ReleaseOut & { project: ProjectOut; latest_route?: RouteOut | null }
 type RouteOut = { id: number; project_id: number; slug: string; target_url: string; release_id?: number | null; created_at: string }
+type RouteHit = { id: number; ts: string; ip?: string | null; ua?: string | null; ref?: string | null }
 
 // Minimal toast impl
 function useToast() {
@@ -43,12 +44,13 @@ function useToast() {
   return { push, view }
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, onCopied }: { text: string; onCopied?: () => void }) {
   const [copied, setCopied] = useState(false)
   return (
     <button className="ghost" onClick={async () => {
       await navigator.clipboard.writeText(text)
       setCopied(true)
+      onCopied?.()
       setTimeout(() => setCopied(false), 1000)
     }}>{copied ? 'Copied' : 'Copy'}</button>
   )
@@ -66,6 +68,44 @@ function Section({ title, children, right }: { title: string; children: React.Re
       {children}
     </div>
   )
+}
+
+// Theme toggle
+type ThemePref = 'system' | 'light' | 'dark'
+function useTheme() {
+  const [pref, setPref] = useState<ThemePref>(() => (localStorage.getItem('theme') as ThemePref) || 'system')
+  useEffect(() => {
+    const root = document.documentElement
+    if (pref === 'system') {
+      root.removeAttribute('data-theme')
+    } else {
+      root.setAttribute('data-theme', pref)
+    }
+    localStorage.setItem('theme', pref)
+  }, [pref])
+  return { pref, setPref }
+}
+
+function ThemeToggle() {
+  const { pref, setPref } = useTheme()
+  const cycle = () => setPref(pref === 'system' ? 'light' : pref === 'light' ? 'dark' : 'system')
+  const label = pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark'
+  return <button className="ghost" onClick={cycle} title="Theme">Theme: {label}</button>
+}
+
+// Relative time formatter
+function formatRelativeTime(iso: string): string {
+  const ts = new Date(iso).getTime()
+  const now = Date.now()
+  const diffSec = Math.max(0, Math.floor((now - ts) / 1000))
+  if (diffSec < 5) return 'just now'
+  if (diffSec < 60) return `${diffSec}s ago`
+  const min = Math.floor(diffSec / 60)
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  return `${day}d ago`
 }
 
 // Wizard Steps
@@ -160,37 +200,101 @@ function HitsChip({ routeId }: { routeId: number }) {
     const t = setInterval(load, 3000)
     return () => { alive = false; clearInterval(t) }
   }, [routeId])
-  return <span className="chip">Hits: {count == null ? '—' : count}</span>
+  return <span className="chip hits">Hits: {count == null ? '—' : count}</span>
 }
 
-function RoutesTable({ routes }: { routes: RouteOut[] }) {
+function RoutesTable({ routes, onActiveRoute, onShowDetail, onCopied }: { routes: RouteOut[]; onActiveRoute?: (url: string) => void; onShowDetail?: (r: RouteOut) => void; onCopied?: () => void }) {
   const base = `${window.location.origin}/r/`
   return (
-    <table className="table">
-      <thead>
-        <tr>
-          <th>Slug</th>
-          <th>URL</th>
-          <th>Hits</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {routes.map(r => (
-          <tr key={r.id}>
-            <td><code>{r.slug}</code></td>
-            <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.target_url}</td>
-            <td><HitsChip routeId={r.id} /></td>
-            <td className="row" style={{ justifyContent: 'flex-end' }}>
-              <CopyButton text={`${base}${r.slug}`} />
-              <a href={`${base}${r.slug}`} target="_blank" rel="noreferrer">
-                <button>Open</button>
-              </a>
-            </td>
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Slug</th>
+            <th>URL</th>
+            <th>Hits</th>
+            <th></th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {routes.map(r => {
+            const url = `${base}${r.slug}`
+            return (
+              <tr key={r.id} onMouseEnter={() => onActiveRoute?.(url)}>
+                <td><code>{r.slug}</code></td>
+                <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.target_url}</td>
+                <td><HitsChip routeId={r.id} /></td>
+                <td className="row" style={{ justifyContent: 'flex-end' }}>
+                  <button onClick={() => onShowDetail?.(r)}>Details</button>
+                  <CopyButton text={url} onCopied={onCopied} />
+                  <a href={url} target="_blank" rel="noreferrer">
+                    <button>Open</button>
+                  </a>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function RouteDetail({ route, onClose }: { route: RouteOut; onClose: () => void }) {
+  const [hits, setHits] = useState<RouteHit[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await http<{ hits: RouteHit[] }>(`/api/routes/${route.id}/hits/recent?limit=20`)
+      setHits(res.hits)
+    } catch (e: any) {
+      setError(e.message || 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [route.id])
+
+  const base = `${window.location.origin}/r/${route.slug}`
+
+  return (
+    <Section title={`Route detail: ${route.slug}`} right={<button className="ghost" onClick={onClose}>Back</button>}>
+      <div className="row" style={{ alignItems: 'center' }}>
+        <span className="muted">Target</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{route.target_url}</span>
+        <div style={{ flex: 1 }} />
+        <a href={base} target="_blank" rel="noreferrer"><button>Open</button></a>
+      </div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        <div className="heading" style={{ margin: 0 }}>Recent hits</div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="ghost" onClick={load} disabled={loading}>{loading ? <SpinnerInline /> : 'Refresh'}</button>
+        </div>
+      </div>
+      {error && <div className="muted">Error: {error}</div>}
+      {!error && (
+        hits == null && loading ? (
+          <div className="muted">Loading…</div>
+        ) : hits && hits.length > 0 ? (
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            {hits.map(h => (
+              <li key={h.id} style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #1f2937' }}>
+                <span className="chip" style={{ minWidth: 68, justifyContent: 'center' }}>{formatRelativeTime(h.ts)}</span>
+                <span className="muted" style={{ minWidth: 80 }}>{h.ip || '—'}</span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.ref || h.ua || '—'}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="muted">No hits yet. Share your route URL and check back.</div>
+        )
+      )}
+    </Section>
   )
 }
 
@@ -199,6 +303,8 @@ export function App() {
   const [project, setProject] = useState<ProjectOut | null>(null)
   const [release, setRelease] = useState<ReleaseOut | null>(null)
   const [routes, setRoutes] = useState<RouteOut[]>([])
+  const [selectedRoute, setSelectedRoute] = useState<RouteOut | null>(null)
+  const [activeCopyUrl, setActiveCopyUrl] = useState<string | null>(null)
 
   // Keep routes list by pulling from release detail (to get latest_route) when release changes
   useEffect(() => {
@@ -217,16 +323,36 @@ export function App() {
 
   const resetAll = () => { setProject(null); setRelease(null); setRoutes([]) }
 
+  // Keyboard copy: press 'c' to copy last active route URL
+  useEffect(() => {
+    const handler = async (e: KeyboardEvent) => {
+      const key = (e.key || '').toLowerCase()
+      if (key !== 'c' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable)) return
+      if (activeCopyUrl) {
+        try {
+          await navigator.clipboard.writeText(activeCopyUrl)
+          toast.push('Copied route URL', 'ok')
+        } catch { /* ignore */ }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [activeCopyUrl])
+
   return (
     <div className="container">
       <div className="row" style={{ alignItems: 'center', marginBottom: 12 }}>
         <h1 style={{ margin: 0 }}>RouteForge</h1>
         <span className="muted">Demo SPA</span>
         <div style={{ flex: 1 }} />
+        <ThemeToggle />
         <button className="ghost" onClick={resetAll}>Reset</button>
       </div>
 
-      <Section title="1) Create project">
+      <Section title="1) Create project" right={<span className="muted">Step 1</span>}>
         {project ? (
           <div className="row" style={{ alignItems: 'center' }}>
             <span className="chip">{project.name}</span>
@@ -237,7 +363,7 @@ export function App() {
         )}
       </Section>
 
-      <Section title="2) Create release">
+      <Section title="2) Create release" right={!project ? <span className="muted">Waiting for project</span> : <span className="muted">Step 2</span>}>
         {project ? (
           release ? (
             <div className="row" style={{ alignItems: 'center' }}>
@@ -248,21 +374,30 @@ export function App() {
             <CreateReleaseStep project={project} onCreated={setRelease} />
           )
         ) : (
-          <div className="muted">Create a project first.</div>
+          <div className="muted">No project yet. Create a project to continue.</div>
         )}
       </Section>
 
-      <Section title="3) Create route">
-        {project ? (
-          routes.length ? (
-            <RoutesTable routes={routes} />
+      {selectedRoute ? (
+        <RouteDetail route={selectedRoute} onClose={() => setSelectedRoute(null)} />
+      ) : (
+        <Section title="3) Create route" right={!project ? <span className="muted">Waiting for project</span> : !release ? <span className="muted">Optional: link release</span> : undefined}>
+          {project ? (
+            routes.length ? (
+              <RoutesTable
+                routes={routes}
+                onActiveRoute={setActiveCopyUrl}
+                onShowDetail={setSelectedRoute}
+                onCopied={() => toast.push('Copied route URL', 'ok')}
+              />
+            ) : (
+              <CreateRouteStep project={project} release={release} onCreated={(r) => setRoutes([r])} />
+            )
           ) : (
-            <CreateRouteStep project={project} release={release} onCreated={(r) => setRoutes([r])} />
-          )
-        ) : (
-          <div className="muted">Create a project and release first.</div>
-        )}
-      </Section>
+            <div className="muted">No project yet. Create a project to start.</div>
+          )}
+        </Section>
+      )}
 
       {toast.view}
     </div>

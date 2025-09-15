@@ -147,3 +147,51 @@ def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db))
     }
 
 
+
+@router.get("/routes/{route_id}/hits/recent")
+def get_route_recent_hits(route_id: int, limit: int = 20, db: Session = Depends(get_db)):
+    """Return the most recent N hits for a given route.
+
+    The result is ordered by timestamp descending and includes minimal fields for UI display.
+    """
+    exists = db.get(models.Route, route_id)
+    if exists is None:
+        return error("not_found", status_code=404)
+
+    # Normalize and clamp limit
+    try:
+        n = int(limit)
+    except Exception:
+        n = 20
+    if n < 1:
+        n = 1
+    if n > 100:
+        n = 100
+
+    rows = db.execute(
+        select(
+            models.RouteHit.id.label("id"),
+            models.RouteHit.ts.label("ts"),
+            models.RouteHit.ip.label("ip"),
+            models.RouteHit.ua.label("ua"),
+            models.RouteHit.ref.label("ref"),
+        )
+        .where(models.RouteHit.route_id == route_id)
+        .order_by(models.RouteHit.ts.desc())
+        .limit(n)
+    ).all()
+
+    hits = [
+        {
+            "id": int(r.id),
+            "ts": r.ts.isoformat() if hasattr(r.ts, "isoformat") else str(r.ts),
+            "ip": r.ip,
+            "ua": r.ua,
+            "ref": r.ref,
+        }
+        for r in rows
+    ]
+
+    return {"hits": hits}
+
+

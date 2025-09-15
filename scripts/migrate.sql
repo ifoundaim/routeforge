@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS releases (
   version VARCHAR(64) NOT NULL,
   notes TEXT,
   artifact_url TEXT NOT NULL,
-  -- Prefer TiDB VECTOR type if available in your cluster (>= v7.x):
-  embedding VECTOR(768) NULL,
+  -- embedding column: use LONGBLOB for broad MySQL compatibility (VECTOR in TiDB handled by Python migrator)
+  embedding LONGBLOB NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX ix_releases_project (project_id),
   CONSTRAINT fk_releases_project FOREIGN KEY (project_id) REFERENCES projects(id)
