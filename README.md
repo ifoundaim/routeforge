@@ -127,10 +127,14 @@ Server runs on `http://localhost:${PORT:-8000}`. See `docs/quickstart.md` for a 
 
 - `TIDB_DSN`: MySQL-compatible DSN, e.g. `mysql+pymysql://user:password@host:4000/dbname`
 - `PORT`: default `8000`
+- `LOG_LEVEL`: default `INFO`
+- `RATE_LIMIT_BURST`: per-IP burst tokens (default `10`)
+- `RATE_LIMIT_WINDOW_SEC`: token bucket window in seconds (default `10`)
 
 ## API Summary
 
 - `GET /healthz` → `{ "ok": true }`
+- `GET /healthz/db` → `{ "db": "ok" }` or 503 with `{ "error": "db_unhealthy", "detail": "..." }`
 - `POST /api/projects` → create project
 - `POST /api/releases` → create release
 - `POST /api/routes` → create route (unique slug)
@@ -142,7 +146,8 @@ Server runs on `http://localhost:${PORT:-8000}`. See `docs/quickstart.md` for a 
 
 ```bash
 # Health
-curl -s http://localhost:8000/healthz | jq .
+curl -i http://localhost:8000/healthz
+curl -i http://localhost:8000/healthz/db
 
 # Create project
 PROJECT=$(curl -s -X POST http://localhost:8000/api/projects \
@@ -172,6 +177,22 @@ curl -i http://localhost:8000/r/demo | sed -n '1,5p'
 curl -s http://localhost:8000/api/routes/$ROUTE_ID/hits | jq .
 ```
 
+## Reliability
+
+The API adds middleware to stamp each request with an `X-Request-ID` and logs timing: method, path, status, elapsed ms. Errors use a standard JSON shape: `{ "error": "code", "detail": "..." }` and include `X-Request-ID` in the response headers.
+
+Redirects are hardened with an in-memory, per-IP token-bucket rate limiter and URL normalization/validation that forbids `javascript:` and `data:` schemes. When rate-limited: `429 {"error":"rate_limited"}`, unknown slugs: `404 {"error":"not_found"}`.
+
+### cURL Quick Demo
+
+```bash
+API="http://localhost:${PORT:-8000}"
+curl -i "$API/healthz"
+curl -i "$API/healthz/db"
+# Rate limit demo (same IP):
+for i in {1..20}; do curl -s -o /dev/null -w "%{http_code} " "$API/r/pp-hero"; done; echo
+```
+
 ## Dev Notes
 
 - CORS is open to all origins for demo purposes.
@@ -195,3 +216,39 @@ curl -s http://localhost:8000/api/routes/$ROUTE_ID/hits | jq .
 - Data Flow: `docs/data-flow.md`
 - Validation Pack: `docs/validation-pack.md`
 - Troubleshooting: `docs/troubleshooting.md`
+ - API Reference: `docs/api.md` (see `/openapi.json`, `/docs`, `/redoc`)
+
+## How to record the demo (3 minutes)
+
+1) Run the server (Terminal A)
+
+```bash
+make run
+```
+
+2) Capture the demo assets (Terminal B)
+
+```bash
+# Writes JSON/headers to assets/demo/
+bash scripts/capture.sh
+# Or specify an output dir explicitly
+bash scripts/capture.sh "$PWD/assets/demo"
+```
+
+3) Optional: Open the interactive docs and take a screenshot (macOS)
+
+```bash
+open "http://localhost:${PORT:-8000}/docs"
+OUT="$PWD/assets/demo"; mkdir -p "$OUT"
+screencapture -x "$OUT/docs-$(date +%Y%m%d-%H%M%S).png"
+```
+
+4) Optional: Show a live 302 in the browser
+
+```bash
+# Use the slug from agent-publish-force.json (route.slug)
+SLUG=$(jq -r .route.slug "$PWD/assets/demo/"*-agent-publish-force.json)
+open "http://localhost:${PORT:-8000}/r/$SLUG"
+```
+
+All assets will be available under `assets/demo/` for quick drag-and-drop into slides.

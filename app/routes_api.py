@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .db import get_db
 from . import models, schemas
+from .errors import json_error
 
 
 logger = logging.getLogger("routeforge.api")
@@ -15,8 +16,8 @@ logger = logging.getLogger("routeforge.api")
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-def error(message: str, status_code: int = 400):
-    return JSONResponse(status_code=status_code, content={"error": message})
+def error(code: str, status_code: int = 400):
+    return json_error(code, status_code=status_code)
 
 
 @router.post("/projects", response_model=schemas.ProjectOut)

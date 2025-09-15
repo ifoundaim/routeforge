@@ -9,6 +9,9 @@ from .routes_api import router as api_router
 from .routes_redirect import router as redirect_router
 from .routes_agent import router as agent_router
 from .routes_analytics import router as analytics_router
+from .routes_health import router as health_router
+from .middleware import RequestContextMiddleware
+from .errors import install_exception_handlers
 
 
 load_dotenv()
@@ -27,12 +30,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Request context and timing
+app.add_middleware(RequestContextMiddleware)
 
-@app.get("/healthz")
-def healthz():
-    return {"ok": True}
+# Exception handlers for consistent error shapes
+install_exception_handlers(app)
 
-
+app.include_router(health_router)
 app.include_router(api_router)
 app.include_router(redirect_router)
 app.include_router(agent_router)

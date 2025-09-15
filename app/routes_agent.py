@@ -14,14 +14,15 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from . import models
 from .search import search_similar_releases
+from .errors import json_error
 
 logger = logging.getLogger("routeforge.agent")
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
-def error(message: str, status_code: int = 400):
-    return JSONResponse(status_code=status_code, content={"error": message})
+def error(code: str, status_code: int = 400):
+    return json_error(code, status_code=status_code)
 
 
 def slugify(text_value: str) -> str:

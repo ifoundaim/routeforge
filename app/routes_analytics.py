@@ -8,6 +8,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.orm import Session
 
 from .db import get_db, now_utc
+from .errors import json_error
 from . import models
 
 
@@ -16,8 +17,8 @@ logger = logging.getLogger("routeforge.analytics")
 router = APIRouter(prefix="/api", tags=["analytics"]) 
 
 
-def error(message: str, status_code: int = 400):
-    return JSONResponse(status_code=status_code, content={"error": message})
+def error(code: str, status_code: int = 400):
+    return json_error(code, status_code=status_code)
 
 
 def _normalize_days(days: int) -> int:

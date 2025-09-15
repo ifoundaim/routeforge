@@ -62,6 +62,23 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def try_get_session() -> Optional[Session]:
+    """Best-effort session opener. Returns None if engine is unavailable (e.g., no DSN).
+
+    Allows routes to degrade gracefully in demo environments without a database.
+    """
+    try:
+        _ensure_engine_and_session()
+    except Exception as exc:  # pragma: no cover - demo convenience
+        logger.warning("DB unavailable: %s", exc)
+        return None
+    try:
+        return _SessionLocal()
+    except Exception as exc:  # pragma: no cover - demo convenience
+        logger.warning("Failed to create DB session: %s", exc)
+        return None
+
+
 def execute_scalar(sql: str, **params: Any) -> Any:
     """Execute a SQL statement and return the first scalar value.
 
