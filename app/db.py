@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import Generator, Optional
+from typing import Generator, Optional, Any
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -60,4 +61,23 @@ def get_db() -> Generator[Session, None, None]:
     finally:
         db.close()
 
+
+def execute_scalar(sql: str, **params: Any) -> Any:
+    """Execute a SQL statement and return the first scalar value.
+
+    Uses the global engine and a short-lived connection. Intended for metadata checks
+    and administrative operations.
+    """
+    _ensure_engine_and_session()
+    with _engine.connect() as conn:
+        result = conn.execute(
+            conn.exec_driver_sql(sql),
+        ) if not params else conn.execute(conn.exec_driver_sql(sql), params)
+        row = result.fetchone()
+        return row[0] if row is not None and len(row) > 0 else None
+
+
+def now_utc() -> datetime:
+    """Return a timezone-aware UTC datetime (for consistency in logs)."""
+    return datetime.now(timezone.utc)
 

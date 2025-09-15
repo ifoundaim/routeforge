@@ -8,6 +8,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
     Index,
+    LargeBinary,
+    JSON,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -36,6 +38,10 @@ class Release(Base):
     version = Column(String(64), nullable=False)
     notes = Column(Text, nullable=True)
     artifact_url = Column(String(2048), nullable=False)
+    # Optional embedding column. In TiDB/MySQL with VECTOR type available, the actual
+    # column is created via migration as VECTOR(768). We map it as LargeBinary here to
+    # avoid dialect/type issues when reading. The app writes/read via raw SQL when needed.
+    embedding = Column(LargeBinary, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project = relationship("Project", back_populates="releases")
@@ -71,5 +77,28 @@ class RouteHit(Base):
     ref = Column(String(2048), nullable=True)
 
     route = relationship("Route", back_populates="hits")
+
+
+class ReleasesStaging(Base):
+    __tablename__ = "releases_staging"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    artifact_url = Column(Text, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class Audit(Base):
+    __tablename__ = "audit"
+    __table_args__ = (
+        Index("ix_audit_ts", "ts"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entity_type = Column(String(32), nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    action = Column(String(64), nullable=False)
+    meta = Column(JSON, nullable=True)
+    ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 

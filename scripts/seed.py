@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--dsn", dest="dsn", help="Database DSN (MySQL/TiDB)")
     args = parser.parse_args()
 
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
     from app.db import get_engine
     from app.models import Project, Release, Route
@@ -39,30 +39,57 @@ def main():
 
     try:
         if args.demo == "basic":
-            project = Project(name="RouteForge Demo", owner="routeforge", description="Demo project")
-            db.add(project)
-            db.commit()
-            db.refresh(project)
+            # Get-or-create project by name to be idempotent
+            project = db.execute(
+                select(Project)
+                .where(Project.name == "RouteForge Demo")
+                .order_by(Project.id.asc())
+                .limit(1)
+            ).scalars().first()
+            if project is None:
+                project = Project(name="RouteForge Demo", owner="routeforge", description="Demo project")
+                db.add(project)
+                db.commit()
+                db.refresh(project)
 
-            release = Release(
-                project_id=project.id,
-                version="1.0.0",
-                artifact_url="https://example.com/artifacts/routeforge-1.0.0.tgz",
-                notes="Initial demo release",
-            )
-            db.add(release)
-            db.commit()
-            db.refresh(release)
+            # Get-or-create release by project + version
+            release = db.execute(
+                select(Release)
+                .where((Release.project_id == project.id) & (Release.version == "1.0.0"))
+                .order_by(Release.id.asc())
+                .limit(1)
+            ).scalars().first()
+            if release is None:
+                release = Release(
+                    project_id=project.id,
+                    version="1.0.0",
+                    artifact_url="https://example.com/artifacts/routeforge-1.0.0.tgz",
+                    notes="Initial demo release",
+                )
+                db.add(release)
+                db.commit()
+                db.refresh(release)
 
-            route = Route(
-                project_id=project.id,
-                slug="demo",
-                target_url="https://example.com/downloads/routeforge/latest",
-                release_id=release.id,
-            )
-            db.add(route)
-            db.commit()
-            db.refresh(route)
+            # Get-or-create route by global unique slug 'demo'
+            route = db.execute(
+                select(Route)
+                .where(Route.slug == "demo")
+                .order_by(Route.id.asc())
+                .limit(1)
+            ).scalars().first()
+            if route is None:
+                route = Route(
+                    project_id=project.id,
+                    slug="demo",
+                    target_url="https://example.com/downloads/routeforge/latest",
+                    release_id=release.id,
+                )
+                db.add(route)
+                db.commit()
+                db.refresh(route)
+            else:
+                # If it exists, do not override cross-project ownership; keep seed idempotent
+                pass
 
             logger.info(
                 "Seeded demo data: project_id=%s release_id=%s route_slug=%s",
