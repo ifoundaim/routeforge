@@ -2,16 +2,17 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import get_db, try_get_session
+from .db import try_get_session
 from . import models
 from .errors import json_error
+from .utils.validators import validate_target_url
 
 
 logger = logging.getLogger("routeforge.redirect")
@@ -19,8 +20,22 @@ logger = logging.getLogger("routeforge.redirect")
 router = APIRouter(tags=["redirects"])
 
 
-def error(code: str, status_code: int = 400, detail: Optional[str] = None):
-    return json_error(code, status_code=status_code, detail=detail)
+def _with_request_id(response: JSONResponse, request: Request) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    return response
+
+
+def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None) -> JSONResponse:
+    response = json_error(code, status_code=status_code, detail=detail)
+    return _with_request_id(response, request)
+
+
+def _get_allowed_target_schemes() -> Tuple[str, ...]:
+    raw = os.getenv("ALLOWED_TARGET_SCHEMES", "https,http") or "https,http"
+    cleaned = tuple(dict.fromkeys([item.strip().lower() for item in raw.split(",") if item.strip()]))
+    return cleaned or ("https", "http")
 
 
 def extract_client_ip(request: Request) -> Optional[str]:
@@ -72,25 +87,6 @@ def _get_bucket_for_ip(ip: str) -> TokenBucket:
     return bucket
 
 
-def _normalize_target_url(value: str) -> Optional[str]:
-    try:
-        from urllib.parse import urlparse, urlunparse
-
-        parsed = urlparse(value)
-        scheme = (parsed.scheme or "").lower()
-        if scheme in ("javascript", "data"):
-            return None
-        if not scheme:
-            # Treat schemeless as http
-            parsed = parsed._replace(scheme="http")
-        # Normalize netloc casing and path
-        netloc = parsed.netloc.lower()
-        normalized = urlunparse((parsed.scheme.lower(), netloc, parsed.path or "/", parsed.params, parsed.query, parsed.fragment))
-        return normalized
-    except Exception:
-        return None
-
-
 @router.get("/r/{slug}")
 def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(try_get_session)):
     # Rate limiting per IP (best effort, in-memory) — applied before DB work
@@ -98,15 +94,15 @@ def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(t
     ip_key = ip or "unknown"
     bucket = _get_bucket_for_ip(ip_key)
     if not bucket.try_consume(1.0):
-        return error("rate_limited", status_code=429, detail="Too many requests from this IP")
+        return error(request, "rate_limited", status_code=429, detail="Too many requests from this IP")
 
     if db is None:
         # No DB configured: behave as not found to avoid leaking internal state
-        return error("not_found", status_code=404)
+        return error(request, "not_found", status_code=404)
 
     route = db.execute(select(models.Route).where(models.Route.slug == slug)).scalar_one_or_none()
     if route is None:
-        return error("not_found", status_code=404)
+        return error(request, "not_found", status_code=404)
 
     ua = request.headers.get("user-agent")
     # Use historical "referer" header, with fallback to common misspelling "referrer"
@@ -116,12 +112,13 @@ def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(t
     db.add(hit)
     db.commit()
 
-    normalized = _normalize_target_url(route.target_url)
-    if not normalized:
+    allowed_schemes = _get_allowed_target_schemes()
+    try:
+        normalized = validate_target_url(route.target_url, allowed=allowed_schemes)
+    except ValueError:
         logger.warning("Unsafe or invalid target_url for slug=%s route_id=%s", slug, route.id)
-        return error("invalid_target_url", status_code=400)
+        detail = f"Target URL scheme must be one of: {', '.join(allowed_schemes)}"
+        return error(request, "invalid_url", status_code=422, detail=detail)
 
     logger.info("Redirect slug=%s route_id=%s ip=%s", slug, route.id, ip)
     return RedirectResponse(url=normalized, status_code=302)
-
-
