@@ -1,9 +1,8 @@
 import logging
 from datetime import timedelta
-from typing import List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import Session
 
@@ -32,6 +31,20 @@ def _normalize_days(days: int) -> int:
     if d > 365:
         d = 365
     return d
+
+
+def _coerce_ref(value: Optional[Any]) -> Optional[str]:
+    if value is None:
+        return None
+
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8", "ignore")
+        except Exception:  # pragma: no cover - extremely defensive
+            value = value.decode("utf-8", errors="ignore")
+
+    text = str(value).strip()
+    return text or None
 
 
 @router.get("/stats/summary")
@@ -116,16 +129,25 @@ def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db))
         .limit(20)
     ).all()
 
-    referrers: List[Dict[str, Any]] = [
-        {"ref": r.ref, "count": int(r.count)} for r in ref_rows
-    ]
-
+    referrers: List[Dict[str, Any]] = []
     utm_counts: Dict[str, int] = {}
+
     for r in ref_rows:
-        decoded = decode_ref(r.ref)
-        utm_source = (decoded.get("utm") or {}).get("source")
+        cleaned_ref = _coerce_ref(getattr(r, "ref", None))
+        referrers.append({"ref": cleaned_ref or "", "count": int(r.count or 0)})
+        if not cleaned_ref:
+            continue
+
+        try:
+            decoded = decode_ref(cleaned_ref)
+        except Exception:  # pragma: no cover - defensive guard
+            logger.debug("Unable to decode ref value: %s", cleaned_ref, exc_info=True)
+            continue
+
+        utm_payload = decoded.get("utm") if isinstance(decoded, dict) else None
+        utm_source = utm_payload.get("source") if isinstance(utm_payload, dict) else None
         if utm_source:
-            utm_counts[utm_source] = utm_counts.get(utm_source, 0) + int(r.count)
+            utm_counts[utm_source] = utm_counts.get(utm_source, 0) + int(r.count or 0)
 
     utm_top_sources = [
         {"source": source, "count": count}

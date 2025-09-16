@@ -3,14 +3,14 @@ import os
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.responses import Response
 
 from .db import get_db
 from . import models, schemas
-from .errors import json_error
+from .middleware import json_error_response
 from .utils.validators import slugify, validate_target_url
 from .auth.magic import SessionUser, get_session_user, is_auth_enabled
 
@@ -20,16 +20,8 @@ logger = logging.getLogger("routeforge.api")
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-def _with_request_id(response: JSONResponse, request: Request) -> JSONResponse:
-    request_id = getattr(request.state, "request_id", None)
-    if request_id:
-        response.headers["X-Request-ID"] = request_id
-    return response
-
-
-def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None) -> JSONResponse:
-    response = json_error(code, status_code=status_code, detail=detail)
-    return _with_request_id(response, request)
+def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None):
+    return json_error_response(request, code, status_code=status_code, detail=detail)
 
 
 def _get_allowed_target_schemes() -> Tuple[str, ...]:
@@ -38,7 +30,7 @@ def _get_allowed_target_schemes() -> Tuple[str, ...]:
     return cleaned or ("https", "http")
 
 
-def _require_session(request: Request) -> Tuple[Optional[SessionUser], Optional[JSONResponse]]:
+def _require_session(request: Request) -> Tuple[Optional[SessionUser], Optional[Response]]:
     if not is_auth_enabled():
         return None, None
 
@@ -49,7 +41,7 @@ def _require_session(request: Request) -> Tuple[Optional[SessionUser], Optional[
     return user, None
 
 
-@router.post("/projects", response_model=schemas.ProjectOut)
+@router.post("/projects", response_model=schemas.ProjectOut, status_code=201)
 def create_project(payload: schemas.ProjectCreate, request: Request, db: Session = Depends(get_db)):
     session_user, failure = _require_session(request)
     if failure is not None:
@@ -66,7 +58,7 @@ def create_project(payload: schemas.ProjectCreate, request: Request, db: Session
     return project
 
 
-@router.post("/releases", response_model=schemas.ReleaseOut)
+@router.post("/releases", response_model=schemas.ReleaseOut, status_code=201)
 def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session = Depends(get_db)):
     session_user, failure = _require_session(request)
     if failure is not None:
@@ -86,7 +78,7 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
     return release
 
 
-@router.post("/routes", response_model=schemas.RouteOut)
+@router.post("/routes", response_model=schemas.RouteOut, status_code=201)
 def create_route(payload: schemas.RouteCreate, request: Request, db: Session = Depends(get_db)):
     session_user, failure = _require_session(request)
     if failure is not None:
@@ -108,7 +100,8 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
             return error(request, "release_project_mismatch", status_code=400)
 
     allowed_schemes = _get_allowed_target_schemes()
-    sanitized_slug = slugify(payload.slug)
+    slug_raw = (payload.slug or "").strip()
+    sanitized_slug = slugify(slug_raw)
     if not sanitized_slug or len(sanitized_slug) < 2:
         return error(
             request,
@@ -118,7 +111,7 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
         )
 
     try:
-        normalized_url = validate_target_url(payload.target_url, allowed=allowed_schemes)
+        normalized_url = validate_target_url(payload.target_url or "", allowed=allowed_schemes)
     except ValueError:
         detail = f"Target URL scheme must be one of: {', '.join(allowed_schemes)}"
         return error(request, "invalid_url", status_code=422, detail=detail)

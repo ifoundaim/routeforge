@@ -1,14 +1,54 @@
 import logging
 import time
 import uuid
-from typing import Callable
+from typing import Optional
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
+
+from .errors import json_error
 
 
 logger = logging.getLogger("routeforge.request")
+
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Max-Age": "600",
+    "Access-Control-Expose-Headers": "X-Request-ID",
+}
+
+
+def _apply_cors_headers(response: Response) -> Response:
+    """Ensure permissive CORS headers are present for demo environments."""
+
+    for header, value in _CORS_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
+def _attach_request_id(response: Response, request: Request) -> Response:
+    request_id = get_request_id(request)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    return response
+
+
+def json_error_response(
+    request: Request,
+    code: str,
+    *,
+    status_code: int = 400,
+    detail: Optional[str] = None,
+) -> JSONResponse:
+    """Create a JSON error response with permissive CORS and X-Request-ID."""
+
+    response = json_error(code, status_code=status_code, detail=detail)
+    _attach_request_id(response, request)
+    return _apply_cors_headers(response)
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -27,7 +67,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         start_time = time.perf_counter()
         try:
-            response = await call_next(request)
+            if request.method == "OPTIONS":
+                response = Response(status_code=204)
+            else:
+                response = await call_next(request)
         except Exception:
             # Let FastAPI/Starlette exception handlers produce the JSON error body.
             # We only record timing here and re-raise.
@@ -55,12 +98,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         )
 
         # Echo X-Request-ID
-        response.headers["X-Request-ID"] = request_id
-        return response
+        _attach_request_id(response, request)
+        return _apply_cors_headers(response)
 
 
 def get_request_id(request: Request) -> str:
     """Helper to read the request id from request.state, if set."""
     return getattr(request.state, "request_id", "")
-
-

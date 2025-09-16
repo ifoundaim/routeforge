@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import try_get_session
 from . import models
-from .errors import json_error
+from .middleware import json_error_response
 from .utils.enrich import parse_ref, serialize_ref
 from .utils.validators import validate_target_url
 
@@ -21,16 +21,8 @@ logger = logging.getLogger("routeforge.redirect")
 router = APIRouter(tags=["redirects"])
 
 
-def _with_request_id(response: JSONResponse, request: Request) -> JSONResponse:
-    request_id = getattr(request.state, "request_id", None)
-    if request_id:
-        response.headers["X-Request-ID"] = request_id
-    return response
-
-
-def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None) -> JSONResponse:
-    response = json_error(code, status_code=status_code, detail=detail)
-    return _with_request_id(response, request)
+def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None):
+    return json_error_response(request, code, status_code=status_code, detail=detail)
 
 
 def _get_allowed_target_schemes() -> Tuple[str, ...]:
@@ -73,10 +65,15 @@ class TokenBucket:
 
 _ip_buckets: Dict[str, TokenBucket] = {}
 
+MIN_BURST = 3
+
 
 def _get_bucket_for_ip(ip: str) -> TokenBucket:
-    capacity = int(os.getenv("RATE_LIMIT_BURST", "10") or "10")
-    window = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "10") or "10")
+    capacity_raw = int(os.getenv("RATE_LIMIT_BURST", "10") or "10")
+    window_raw = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "10") or "10")
+
+    capacity = max(capacity_raw, MIN_BURST)
+    window = max(window_raw, 1)
     bucket = _ip_buckets.get(ip)
     if bucket is None:
         bucket = TokenBucket(capacity=capacity, refill_seconds=window, tokens=float(capacity), last_refill=time.monotonic())
@@ -85,6 +82,8 @@ def _get_bucket_for_ip(ip: str) -> TokenBucket:
         # Update capacity/window dynamically if envs changed during runtime
         bucket.capacity = capacity
         bucket.refill_seconds = window
+        if bucket.tokens > capacity:
+            bucket.tokens = float(capacity)
     return bucket
 
 
@@ -117,7 +116,7 @@ def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(t
 
     allowed_schemes = _get_allowed_target_schemes()
     try:
-        normalized = validate_target_url(route.target_url, allowed=allowed_schemes)
+        normalized = validate_target_url(route.target_url or "", allowed=allowed_schemes)
     except ValueError:
         logger.warning("Unsafe or invalid target_url for slug=%s route_id=%s", slug, route.id)
         detail = f"Target URL scheme must be one of: {', '.join(allowed_schemes)}"

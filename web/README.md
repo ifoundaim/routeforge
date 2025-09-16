@@ -18,6 +18,11 @@ npm run dev
 ```
 This starts Vite on http://localhost:5173 and proxies API calls to http://localhost:8000.
 
+## Landing
+- `/` now serves a lightweight marketing page with quick CTAs into the product.
+- `Open App` navigates to `/app` for the full workflow UI.
+- `View API` opens `/openapi.json` in a new tab so folks can explore the backend contract.
+
 ## Build
 ```bash
 npm run build
@@ -45,4 +50,3 @@ npm run preview
 ## Notes
 - Uses only existing backend endpoints; no schema changes required.
 - Redirect links point to `/r/{slug}`.
-
