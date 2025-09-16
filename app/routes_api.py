@@ -1,6 +1,8 @@
 import logging
+import os
+from typing import Optional, Tuple
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +11,7 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from . import models, schemas
 from .errors import json_error
+from .utils.validators import slugify, validate_target_url
 
 
 logger = logging.getLogger("routeforge.api")
@@ -16,8 +19,22 @@ logger = logging.getLogger("routeforge.api")
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-def error(code: str, status_code: int = 400):
-    return json_error(code, status_code=status_code)
+def _with_request_id(response: JSONResponse, request: Request) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    return response
+
+
+def error(request: Request, code: str, status_code: int = 400, detail: Optional[str] = None) -> JSONResponse:
+    response = json_error(code, status_code=status_code, detail=detail)
+    return _with_request_id(response, request)
+
+
+def _get_allowed_target_schemes() -> Tuple[str, ...]:
+    raw = os.getenv("ALLOWED_TARGET_SCHEMES", "https,http") or "https,http"
+    cleaned = tuple(dict.fromkeys([item.strip().lower() for item in raw.split(",") if item.strip()]))
+    return cleaned or ("https", "http")
 
 
 @router.post("/projects", response_model=schemas.ProjectOut)
@@ -30,10 +47,10 @@ def create_project(payload: schemas.ProjectCreate, db: Session = Depends(get_db)
 
 
 @router.post("/releases", response_model=schemas.ReleaseOut)
-def create_release(payload: schemas.ReleaseCreate, db: Session = Depends(get_db)):
+def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session = Depends(get_db)):
     project = db.get(models.Project, payload.project_id)
     if project is None:
-        return error("project_not_found", status_code=404)
+        return error(request, "project_not_found", status_code=404)
 
     release = models.Release(**payload.model_dump())
     db.add(release)
@@ -43,41 +60,60 @@ def create_release(payload: schemas.ReleaseCreate, db: Session = Depends(get_db)
 
 
 @router.post("/routes", response_model=schemas.RouteOut)
-def create_route(payload: schemas.RouteCreate, db: Session = Depends(get_db)):
+def create_route(payload: schemas.RouteCreate, request: Request, db: Session = Depends(get_db)):
     # Minimal happy-path validations
     project = db.get(models.Project, payload.project_id)
     if project is None:
-        return error("project_not_found", status_code=404)
+        return error(request, "project_not_found", status_code=404)
 
     if payload.release_id is not None:
         release = db.get(models.Release, payload.release_id)
         if release is None:
-            return error("release_not_found", status_code=404)
+            return error(request, "release_not_found", status_code=404)
         if release.project_id != payload.project_id:
-            return error("release_project_mismatch", status_code=400)
+            return error(request, "release_project_mismatch", status_code=400)
+
+    allowed_schemes = _get_allowed_target_schemes()
+    sanitized_slug = slugify(payload.slug)
+    if not sanitized_slug or len(sanitized_slug) < 2:
+        return error(
+            request,
+            "invalid_slug",
+            status_code=422,
+            detail="Slug must contain at least two letters, numbers, or dashes.",
+        )
+
+    try:
+        normalized_url = validate_target_url(payload.target_url, allowed=allowed_schemes)
+    except ValueError:
+        detail = f"Target URL scheme must be one of: {', '.join(allowed_schemes)}"
+        return error(request, "invalid_url", status_code=422, detail=detail)
 
     # Proactive uniqueness check for nicer error; DB constraint remains authoritative
-    existing = db.execute(select(models.Route).where(models.Route.slug == payload.slug)).scalar_one_or_none()
+    existing = db.execute(select(models.Route).where(models.Route.slug == sanitized_slug)).scalar_one_or_none()
     if existing is not None:
-        return error("slug_exists", status_code=409)
+        return error(request, "slug_exists", status_code=409, detail=f"Slug '{sanitized_slug}' already exists.")
 
-    new_route = models.Route(**payload.model_dump())
+    route_data = payload.model_dump()
+    route_data["slug"] = sanitized_slug
+    route_data["target_url"] = normalized_url
+    new_route = models.Route(**route_data)
     db.add(new_route)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        return error("slug_exists", status_code=409)
+        return error(request, "slug_exists", status_code=409, detail=f"Slug '{sanitized_slug}' already exists.")
 
     db.refresh(new_route)
     return new_route
 
 
 @router.get("/releases/{release_id}", response_model=schemas.ReleaseDetailOut)
-def get_release_detail(release_id: int, db: Session = Depends(get_db)):
+def get_release_detail(release_id: int, request: Request, db: Session = Depends(get_db)):
     release = db.get(models.Release, release_id)
     if release is None:
-        return error("not_found", status_code=404)
+        return error(request, "not_found", status_code=404)
 
     # eager load project for response
     _ = release.project  # access relationship
@@ -102,12 +138,10 @@ def get_release_detail(release_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/routes/{route_id}/hits")
-def get_route_hits(route_id: int, db: Session = Depends(get_db)):
+def get_route_hits(route_id: int, request: Request, db: Session = Depends(get_db)):
     exists = db.get(models.Route, route_id)
     if exists is None:
-        return error("not_found", status_code=404)
+        return error(request, "not_found", status_code=404)
 
     count = db.scalar(select(func.count(models.RouteHit.id)).where(models.RouteHit.route_id == route_id))
     return {"count": int(count or 0)}
-
-

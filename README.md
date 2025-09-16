@@ -193,6 +193,18 @@ curl -i "$API/healthz/db"
 for i in {1..20}; do curl -s -o /dev/null -w "%{http_code} " "$API/r/pp-hero"; done; echo
 ```
 
+## Security & Data Hygiene
+
+- Route slugs are normalized to lowercase alphanumerics and single dashes, trimming doubles and enforcing a 64-character maximum; results shorter than two characters trigger `422 {"error":"invalid_slug"}`.
+- Redirect targets must use schemes from `ALLOWED_TARGET_SCHEMES` (default `https,http`); disallowed or malformed URLs return `422 {"error":"invalid_url"}` and the sanitized version of allowed targets is stored and reused.
+- Persisted slugs stay unique after normalization; conflicts respond with `409 {"error":"slug_exists"}` while preserving the sanitized slug in the message.
+- Error payloads always include `{"error","detail"}` and echo `X-Request-ID` when present; example responses:
+  ```json
+  {"error":"invalid_slug","detail":"Slug must contain at least two letters, numbers, or dashes."}
+  {"error":"invalid_url","detail":"Target URL scheme must be one of: https, http"}
+  {"error":"slug_exists","detail":"Slug 'ok' already exists."}
+  ```
+
 ## Dev Notes
 
 - CORS is open to all origins for demo purposes.
