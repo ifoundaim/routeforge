@@ -123,6 +123,12 @@ Minimal-but-real demo backend for an IP registry → releases → short distribu
 
 Server runs on `http://localhost:${PORT:-8000}`. For the dev smoke setup we use `PORT=4000` so that frontend proxy and cURL examples hit `4000`.
 
+## Demo Data
+
+- After running the migrations and seeding the baseline project, populate realistic redirect traffic with `python scripts/faker.py --routes 10 --clicks 500 --days 7`.
+- The script samples existing routes, spreads hits across the requested time window, and reports how many rows were inserted so you can confirm the demo dataset.
+- Override the DSN with `--dsn` if you do not want to rely on the `TIDB_DSN` environment variable.
+
 ## Environment
 
 - `TIDB_DSN`: MySQL-compatible DSN, e.g. `mysql+pymysql://user:password@host:4000/dbname`

@@ -1,0 +1,203 @@
+{
+  "info": {
+    "name": "RouteForge API",
+    "_postman_id": "6b0a88e6-2826-44a4-813e-7b8de97ed986",
+    "description": "Requests that mirror the primary RouteForge API workflows.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/healthz",
+        "description": "Confirms the API service is up."
+      },
+      "response": []
+    },
+    {
+      "name": "Database Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/healthz/db",
+        "description": "Checks whether the database is reachable."
+      },
+      "response": []
+    },
+    {
+      "name": "Agent Publish",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"project_id\": {{projectId}},\n  \"artifact_url\": \"https://example.com/builds/app-v1.2.3.zip\",\n  \"notes\": \"Release candidate\",\n  \"dry_run\": true\n}"
+        },
+        "url": "{{baseUrl}}/agent/publish",
+        "description": "Submits a release artifact to the automation agent."
+      },
+      "response": []
+    },
+    {
+      "name": "Create Project",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"RouteForge\",\n  \"owner\": \"routeforge\",\n  \"description\": \"Demo project\"\n}"
+        },
+        "url": "{{baseUrl}}/api/projects",
+        "description": "Creates a project container for releases."
+      },
+      "response": []
+    },
+    {
+      "name": "Create Release",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"project_id\": {{projectId}},\n  \"version\": \"1.2.3\",\n  \"artifact_url\": \"https://example.com/builds/app-v1.2.3.zip\",\n  \"notes\": \"Release notes\"\n}"
+        },
+        "url": "{{baseUrl}}/api/releases",
+        "description": "Registers a release that belongs to an existing project."
+      },
+      "response": []
+    },
+    {
+      "name": "Create Route",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"project_id\": {{projectId}},\n  \"slug\": \"demo-route\",\n  \"target_url\": \"https://example.com/downloads/latest\",\n  \"release_id\": {{releaseId}}\n}"
+        },
+        "url": "{{baseUrl}}/api/routes",
+        "description": "Creates a download route that points at a target URL."
+      },
+      "response": []
+    },
+    {
+      "name": "Route Hits",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/routes/{{routeId}}/hits",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "routes",
+            "{{routeId}}",
+            "hits"
+          ]
+        },
+        "description": "Returns the total hit count recorded for a route."
+      },
+      "response": []
+    },
+    {
+      "name": "Stats Summary",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/stats/summary?days=7",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "stats",
+            "summary"
+          ],
+          "query": [
+            {
+              "key": "days",
+              "value": "7"
+            }
+          ]
+        },
+        "description": "Summarises recent click activity across all routes."
+      },
+      "response": []
+    },
+    {
+      "name": "Export Route Hits CSV",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/csv"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/routes/{{routeId}}/export.csv?limit=500",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "routes",
+            "{{routeId}}",
+            "export.csv"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "500"
+            }
+          ]
+        },
+        "description": "Streams recent route hits as CSV; adjust the limit as needed."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "projectId",
+      "value": "1"
+    },
+    {
+      "key": "releaseId",
+      "value": "1"
+    },
+    {
+      "key": "routeId",
+      "value": "1"
+    }
+  ]
+}
