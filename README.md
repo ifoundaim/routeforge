@@ -83,6 +83,7 @@ curl -s -X POST "$API/agent/publish" -H 'Content-Type: application/json' \
 - CORS is permissive for demo.
 - Logging includes agent decisions.
 - Migrations are idempotent and will add `releases_staging`, `audit`, `releases.embedding` (VECTOR or LONGBLOB), and FULLTEXT index when possible.
+- Redirect hits capture the referrer host plus any UTM parameters so analytics can surface top sources without schema changes.
 
 # RouteForge Backend (FastAPI + TiDB)
 
@@ -147,6 +148,13 @@ Server runs on `http://localhost:${PORT:-8000}`. For the dev smoke setup we use 
 - `GET /r/{slug}` → 302 redirect to `target_url` and logs a hit
 - `GET /api/releases/{id}` → release with project + latest bound route
 - `GET /api/routes/{id}/hits` → `{ "count": N }`
+
+## Billing (Demo Flags)
+
+- `GET /api/entitlements` → `{ "pro": bool }` for the active demo user (session user if auth is enabled, otherwise the shared `guest`).
+- `POST /dev/upgrade` → `{ "pro": bool }` flips the in-memory entitlement; send `{ "pro": true }` to unlock the UI for demos.
+- Flags are stored in-memory only and default to `false` unless `DEMO_PRO_DEFAULT` is set.
+- No payments or database writes occur. The SPA displays an Upgrade modal and Pro features (CSV export, detailed route analytics) light up without a full reload once the flag is toggled.
 
 ## cURL Validation Pack (API)
 

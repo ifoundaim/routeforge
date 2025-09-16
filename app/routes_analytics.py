@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .db import get_db, now_utc
 from .errors import json_error
 from . import models
+from .utils.enrich import decode_ref
 
 
 logger = logging.getLogger("routeforge.analytics")
@@ -119,6 +120,18 @@ def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db))
         {"ref": r.ref, "count": int(r.count)} for r in ref_rows
     ]
 
+    utm_counts: Dict[str, int] = {}
+    for r in ref_rows:
+        decoded = decode_ref(r.ref)
+        utm_source = (decoded.get("utm") or {}).get("source")
+        if utm_source:
+            utm_counts[utm_source] = utm_counts.get(utm_source, 0) + int(r.count)
+
+    utm_top_sources = [
+        {"source": source, "count": count}
+        for source, count in sorted(utm_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+
     ua_rows = db.execute(
         select(
             models.RouteHit.ua.label("ua"),
@@ -143,6 +156,7 @@ def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db))
         "clicks": int(clicks),
         "by_day": by_day,
         "referrers": referrers,
+        "utm_top_sources": utm_top_sources,
         "user_agents": user_agents,
     }
 
@@ -193,5 +207,4 @@ def get_route_recent_hits(route_id: int, limit: int = 20, db: Session = Depends(
     ]
 
     return {"hits": hits}
-
 

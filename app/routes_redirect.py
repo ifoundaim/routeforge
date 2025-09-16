@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .db import try_get_session
 from . import models
 from .errors import json_error
+from .utils.enrich import parse_ref, serialize_ref
 from .utils.validators import validate_target_url
 
 
@@ -87,7 +88,7 @@ def _get_bucket_for_ip(ip: str) -> TokenBucket:
     return bucket
 
 
-@router.get("/r/{slug}")
+@router.api_route("/r/{slug}", methods=["GET", "HEAD"])
 def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(try_get_session)):
     # Rate limiting per IP (best effort, in-memory) — applied before DB work
     ip = extract_client_ip(request)
@@ -106,9 +107,11 @@ def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(t
 
     ua = request.headers.get("user-agent")
     # Use historical "referer" header, with fallback to common misspelling "referrer"
-    ref = request.headers.get("referer") or request.headers.get("referrer")
+    ref_header = request.headers.get("referer") or request.headers.get("referrer")
+    enriched_ref = parse_ref(ref_header, request.url.query)
+    serialized_ref = serialize_ref(enriched_ref.get("host"), enriched_ref.get("utm") or {}, fallback=ref_header)
 
-    hit = models.RouteHit(route_id=route.id, ip=ip, ua=ua, ref=ref)
+    hit = models.RouteHit(route_id=route.id, ip=ip, ua=ua, ref=serialized_ref)
     db.add(hit)
     db.commit()
 

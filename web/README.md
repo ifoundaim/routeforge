@@ -24,6 +24,19 @@ npm run build
 npm run preview
 ```
 
+## End-to-end tests
+- Ensure the backend API is running locally (defaults to http://localhost:8000).
+- In another terminal, start the web app (`npm run dev`) or point `UI_BASE_URL` to a deployed instance.
+- Install Playwright browsers once:
+  ```bash
+  pnpm exec playwright install
+  ```
+- Run the happy-path E2E suite (headless by default):
+  ```bash
+  pnpm run test:e2e
+  ```
+- Override URLs if needed via env vars like `UI_BASE_URL` and `E2E_TARGET_URL`.
+
 ## Features
 - Wizard: create project → create release → create route
 - Routes table: shows slug, copy button, and live hit count (polls `/api/routes/:id/hits`)
@@ -32,5 +45,4 @@ npm run preview
 ## Notes
 - Uses only existing backend endpoints; no schema changes required.
 - Redirect links point to `/r/{slug}`.
-
 

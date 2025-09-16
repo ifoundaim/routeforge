@@ -12,6 +12,7 @@ from .db import get_db
 from . import models, schemas
 from .errors import json_error
 from .utils.validators import slugify, validate_target_url
+from .auth.magic import SessionUser, get_session_user, is_auth_enabled
 
 
 logger = logging.getLogger("routeforge.api")
@@ -37,9 +38,28 @@ def _get_allowed_target_schemes() -> Tuple[str, ...]:
     return cleaned or ("https", "http")
 
 
+def _require_session(request: Request) -> Tuple[Optional[SessionUser], Optional[JSONResponse]]:
+    if not is_auth_enabled():
+        return None, None
+
+    user = get_session_user(request)
+    if user is None:
+        return None, error(request, "auth_required", status_code=401, detail="Authentication required.")
+
+    return user, None
+
+
 @router.post("/projects", response_model=schemas.ProjectOut)
-def create_project(payload: schemas.ProjectCreate, db: Session = Depends(get_db)):
-    project = models.Project(**payload.model_dump())
+def create_project(payload: schemas.ProjectCreate, request: Request, db: Session = Depends(get_db)):
+    session_user, failure = _require_session(request)
+    if failure is not None:
+        return failure
+
+    project_data = payload.model_dump()
+    if session_user is not None:
+        project_data["owner"] = session_user["email"]
+
+    project = models.Project(**project_data)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -48,9 +68,16 @@ def create_project(payload: schemas.ProjectCreate, db: Session = Depends(get_db)
 
 @router.post("/releases", response_model=schemas.ReleaseOut)
 def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session = Depends(get_db)):
+    session_user, failure = _require_session(request)
+    if failure is not None:
+        return failure
+
     project = db.get(models.Project, payload.project_id)
     if project is None:
         return error(request, "project_not_found", status_code=404)
+
+    if session_user is not None and project.owner != session_user["email"]:
+        return error(request, "forbidden", status_code=403, detail="Project ownership mismatch.")
 
     release = models.Release(**payload.model_dump())
     db.add(release)
@@ -61,10 +88,17 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
 
 @router.post("/routes", response_model=schemas.RouteOut)
 def create_route(payload: schemas.RouteCreate, request: Request, db: Session = Depends(get_db)):
+    session_user, failure = _require_session(request)
+    if failure is not None:
+        return failure
+
     # Minimal happy-path validations
     project = db.get(models.Project, payload.project_id)
     if project is None:
         return error(request, "project_not_found", status_code=404)
+
+    if session_user is not None and project.owner != session_user["email"]:
+        return error(request, "forbidden", status_code=403, detail="Project ownership mismatch.")
 
     if payload.release_id is not None:
         release = db.get(models.Release, payload.release_id)

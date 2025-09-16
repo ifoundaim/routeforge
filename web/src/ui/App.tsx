@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
+import { UpgradeModal } from '../features/billing/UpgradeModal'
+import { useEntitlements } from '../features/billing/useEntitlements'
+
 type Json = Record<string, unknown>
 
 const API_BASE = '' // use Vite proxy
@@ -203,7 +206,21 @@ function HitsChip({ routeId }: { routeId: number }) {
   return <span className="chip hits">Hits: {count == null ? '—' : count}</span>
 }
 
-function RoutesTable({ routes, onActiveRoute, onShowDetail, onCopied }: { routes: RouteOut[]; onActiveRoute?: (url: string) => void; onShowDetail?: (r: RouteOut) => void; onCopied?: () => void }) {
+function RoutesTable({
+  routes,
+  isPro,
+  onActiveRoute,
+  onShowDetail,
+  onCopied,
+  onRequirePro,
+}: {
+  routes: RouteOut[]
+  isPro: boolean
+  onActiveRoute?: (url: string) => void
+  onShowDetail?: (r: RouteOut) => void
+  onCopied?: () => void
+  onRequirePro: () => void
+}) {
   const base = `${window.location.origin}/r/`
   return (
     <div className="table-wrap">
@@ -224,8 +241,14 @@ function RoutesTable({ routes, onActiveRoute, onShowDetail, onCopied }: { routes
                 <td><code>{r.slug}</code></td>
                 <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.target_url}</td>
                 <td><HitsChip routeId={r.id} /></td>
-                <td className="row" style={{ justifyContent: 'flex-end' }}>
-                  <button onClick={() => onShowDetail?.(r)}>Details</button>
+                <td className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+                  {isPro ? (
+                    <button onClick={() => onShowDetail?.(r)}>Details</button>
+                  ) : (
+                    <button className="ghost" onClick={onRequirePro} title="Upgrade to view route details">
+                      🔒 Upgrade
+                    </button>
+                  )}
                   <CopyButton text={url} onCopied={onCopied} />
                   <a href={url} target="_blank" rel="noreferrer">
                     <button>Open</button>
@@ -240,7 +263,7 @@ function RoutesTable({ routes, onActiveRoute, onShowDetail, onCopied }: { routes
   )
 }
 
-function RouteDetail({ route, onClose }: { route: RouteOut; onClose: () => void }) {
+function RouteDetail({ route, onClose, isPro, onRequirePro }: { route: RouteOut; onClose: () => void; isPro: boolean; onRequirePro: () => void }) {
   const [hits, setHits] = useState<RouteHit[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -261,13 +284,21 @@ function RouteDetail({ route, onClose }: { route: RouteOut; onClose: () => void 
   useEffect(() => { load() }, [route.id])
 
   const base = `${window.location.origin}/r/${route.slug}`
+  const exportUrl = `/api/routes/${route.id}/export.csv`
 
   return (
     <Section title={`Route detail: ${route.slug}`} right={<button className="ghost" onClick={onClose}>Back</button>}>
-      <div className="row" style={{ alignItems: 'center' }}>
+      <div className="row" style={{ alignItems: 'center', gap: 12 }}>
         <span className="muted">Target</span>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{route.target_url}</span>
         <div style={{ flex: 1 }} />
+        {isPro ? (
+          <a href={exportUrl}><button>Export CSV</button></a>
+        ) : (
+          <button className="ghost" onClick={onRequirePro} title="Upgrade to export CSV">
+            🔒 Upgrade
+          </button>
+        )}
         <a href={base} target="_blank" rel="noreferrer"><button>Open</button></a>
       </div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -300,11 +331,19 @@ function RouteDetail({ route, onClose }: { route: RouteOut; onClose: () => void 
 
 export function App() {
   const toast = useToast()
+  const { pro, loading: entitlementsLoading, upgradeToPro, upgrading } = useEntitlements()
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [project, setProject] = useState<ProjectOut | null>(null)
   const [release, setRelease] = useState<ReleaseOut | null>(null)
   const [routes, setRoutes] = useState<RouteOut[]>([])
   const [selectedRoute, setSelectedRoute] = useState<RouteOut | null>(null)
   const [activeCopyUrl, setActiveCopyUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!pro) {
+      setSelectedRoute(null)
+    }
+  }, [pro])
 
   // Keep routes list by pulling from release detail (to get latest_route) when release changes
   useEffect(() => {
@@ -321,7 +360,34 @@ export function App() {
     loadReleaseDetail()
   }, [release?.id])
 
-  const resetAll = () => { setProject(null); setRelease(null); setRoutes([]) }
+  const resetAll = () => { setProject(null); setRelease(null); setRoutes([]); setSelectedRoute(null) }
+
+  const openUpgrade = () => setUpgradeOpen(true)
+
+  const handleUpgrade = async () => {
+    try {
+      const upgraded = await upgradeToPro(true)
+      if (upgraded) {
+        toast.push('Pro unlocked', 'ok')
+      } else {
+        toast.push('Pro already active', 'ok')
+      }
+      setUpgradeOpen(false)
+    } catch (e: any) {
+      const message = e?.message ? String(e.message) : 'Unable to upgrade'
+      toast.push(`Upgrade failed: ${message}`, 'error')
+    }
+  }
+
+  useEffect(() => {
+    if (pro && upgradeOpen) {
+      setUpgradeOpen(false)
+    }
+  }, [pro, upgradeOpen])
+
+  const planLabel = entitlementsLoading ? 'Plan: ...' : pro ? 'Plan: Pro' : 'Plan: Free'
+
+  const upgradeButtonLabel = upgrading ? 'Upgrading...' : 'Upgrade'
 
   // Keyboard copy: press 'c' to copy last active route URL
   useEffect(() => {
@@ -344,11 +410,27 @@ export function App() {
 
   return (
     <div className="container">
-      <div className="row" style={{ alignItems: 'center', marginBottom: 12 }}>
+      <div className="row" style={{ alignItems: 'center', marginBottom: 12, gap: 12 }}>
         <h1 style={{ margin: 0 }}>RouteForge</h1>
         <span className="muted">Demo SPA</span>
         <div style={{ flex: 1 }} />
         <ThemeToggle />
+        <span
+          className="chip"
+          style={{
+            backgroundColor: pro ? '#2563eb' : '#374151',
+            color: '#f9fafb',
+            display: 'inline-flex',
+            alignItems: 'center',
+          }}
+        >
+          {planLabel}
+        </span>
+        {!pro && (
+          <button className="primary" onClick={openUpgrade} disabled={upgrading}>
+            {upgradeButtonLabel}
+          </button>
+        )}
         <button className="ghost" onClick={resetAll}>Reset</button>
       </div>
 
@@ -378,17 +460,24 @@ export function App() {
         )}
       </Section>
 
-      {selectedRoute ? (
-        <RouteDetail route={selectedRoute} onClose={() => setSelectedRoute(null)} />
+      {selectedRoute && pro ? (
+        <RouteDetail
+          route={selectedRoute}
+          onClose={() => setSelectedRoute(null)}
+          isPro={pro}
+          onRequirePro={openUpgrade}
+        />
       ) : (
         <Section title="3) Create route" right={!project ? <span className="muted">Waiting for project</span> : !release ? <span className="muted">Optional: link release</span> : undefined}>
           {project ? (
             routes.length ? (
               <RoutesTable
                 routes={routes}
+                isPro={pro}
                 onActiveRoute={setActiveCopyUrl}
                 onShowDetail={setSelectedRoute}
                 onCopied={() => toast.push('Copied route URL', 'ok')}
+                onRequirePro={openUpgrade}
               />
             ) : (
               <CreateRouteStep project={project} release={release} onCreated={(r) => setRoutes([r])} />
@@ -399,9 +488,13 @@ export function App() {
         </Section>
       )}
 
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        onUpgrade={handleUpgrade}
+        upgrading={upgrading}
+      />
       {toast.view}
     </div>
   )
 }
-
-
