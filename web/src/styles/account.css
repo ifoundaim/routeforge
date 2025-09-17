@@ -24,6 +24,7 @@
 .app-header__signin,
 .app-header__retry {
   background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  background-color: #2563eb; /* fallback to ensure visibility in light mode */
   border: 1px solid #1d4ed8;
   color: #fff;
   border-radius: 999px;
@@ -196,6 +197,7 @@
 
 .auth-layer__submit {
   background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  background-color: #2563eb; /* fallback for light mode */
   border: 1px solid #1d4ed8;
   border-radius: 8px;
   color: #fff;

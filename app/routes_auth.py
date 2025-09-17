@@ -57,14 +57,15 @@ def request_magic_link(payload: RequestLinkPayload, request: Request) -> JSONRes
 
     if is_email_enabled():
         logger.info("Magic login link for %s: %s", payload.email.lower(), link)
+        return JSONResponse(status_code=202, content={"detail": "link_sent"})
     else:
         logger.info(
             "EMAIL_ENABLED=0; magic login link (not sent) for %s: %s",
             payload.email.lower(),
             link,
         )
-
-    return JSONResponse(status_code=202, content={"detail": "link_sent"})
+        # In dev mode, return the link so the SPA can auto-redirect
+        return JSONResponse(status_code=202, content={"detail": "link_sent", "dev_link": link})
 
 
 @router.get("/callback")

@@ -61,7 +61,11 @@ export function AuthRequestLink({ open, onClose }: AuthRequestLinkProps) {
     setViewState('loading')
     setError(null)
     try {
-      await apiPost<{ email: string }, unknown>('/auth/request-link', { email })
+      const res = await apiPost<{ email: string }, { detail: string; dev_link?: string }>('/auth/request-link', { email })
+      if (res && res.dev_link) {
+        window.location.href = res.dev_link
+        return
+      }
       setViewState('success')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to send link'
@@ -92,6 +96,7 @@ export function AuthRequestLink({ open, onClose }: AuthRequestLinkProps) {
           <form className="auth-layer__form" onSubmit={submit}>
             <h2 id="auth-link-title">Sign in</h2>
             <p className="auth-layer__copy">Enter your email to get a one-time magic link.</p>
+            <p className="auth-layer__copy" aria-live="polite">New here? Register by entering your email — we’ll create your account after you click the link.</p>
             <label className="auth-layer__label" htmlFor="auth-email">Email address</label>
             <input
               id="auth-email"
