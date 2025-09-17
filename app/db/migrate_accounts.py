@@ -24,7 +24,7 @@ def _table_has_column(conn, table: str, column: str) -> bool:
         WHERE TABLE_NAME = :table_name AND COLUMN_NAME = :column_name
         """
     )
-    result = conn.exec_driver_sql(sql, {"table_name": table, "column_name": column})
+    result = conn.execute(sql, {"table_name": table, "column_name": column})
     return bool(result.scalar())
 
 
@@ -35,7 +35,7 @@ def _index_exists(conn, table: str, index_name: str) -> bool:
         WHERE TABLE_NAME = :table_name AND INDEX_NAME = :index_name
         """
     )
-    result = conn.exec_driver_sql(sql, {"table_name": table, "index_name": index_name})
+    result = conn.execute(sql, {"table_name": table, "index_name": index_name})
     return bool(result.scalar())
 
 
@@ -46,7 +46,7 @@ def _constraint_exists(conn, table: str, constraint: str) -> bool:
         WHERE TABLE_NAME = :table_name AND CONSTRAINT_NAME = :constraint_name
         """
     )
-    result = conn.exec_driver_sql(sql, {"table_name": table, "constraint_name": constraint})
+    result = conn.execute(sql, {"table_name": table, "constraint_name": constraint})
     return bool(result.scalar())
 
 
@@ -93,23 +93,23 @@ def _ensure_user_indexes(conn, table: str) -> None:
 
 
 def _demo_user_id(conn) -> int:
-    existing = conn.exec_driver_sql(
-        "SELECT id FROM users WHERE email = :email",
+    existing = conn.execute(
+        text("SELECT id FROM users WHERE email = :email"),
         {"email": DEMO_EMAIL},
     ).scalar()
     if existing:
         return int(existing)
 
     logger.info("Creating demo user %s", DEMO_EMAIL)
-    result = conn.exec_driver_sql(
-        "INSERT INTO users (email, name) VALUES (:email, :name)",
+    result = conn.execute(
+        text("INSERT INTO users (email, name) VALUES (:email, :name)"),
         {"email": DEMO_EMAIL, "name": DEMO_NAME},
     )
     new_id = result.lastrowid if hasattr(result, "lastrowid") else None
     if new_id is None:
         # Fallback query (TiDB may not expose lastrowid here)
-        new_id = conn.exec_driver_sql(
-            "SELECT id FROM users WHERE email = :email",
+        new_id = conn.execute(
+            text("SELECT id FROM users WHERE email = :email"),
             {"email": DEMO_EMAIL},
         ).scalar()
     if not new_id:
@@ -119,8 +119,8 @@ def _demo_user_id(conn) -> int:
 
 def _backfill_projects(conn, demo_id: int) -> None:
     logger.info("Backfilling projects.user_id -> %s", demo_id)
-    conn.exec_driver_sql(
-        "UPDATE projects SET user_id = :uid WHERE user_id IS NULL",
+    conn.execute(
+        text("UPDATE projects SET user_id = :uid WHERE user_id IS NULL"),
         {"uid": demo_id},
     )
 
