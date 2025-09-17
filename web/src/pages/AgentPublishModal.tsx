@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
+import { LicenseBadge, LicenseCode, LicenseStep } from '../components/LicenseStep'
 import { SimilarRelease, SimilarReleases } from '../components/SimilarReleases'
 import { ToastShelf, useToastQueue } from '../components/Toast'
 import { isModEnter, isMultilineInput, isPlainEnter } from '../lib/keys'
@@ -48,6 +49,11 @@ type AgentPublishModalProps = {
 
 type ActiveAction = 'preview' | 'publish' | null
 
+type AgentPreviewResult = AgentPublishResponse & {
+  license_code: LicenseCode
+  license_text?: string
+}
+
 function buildDisplayJson(meta: AgentAuditEntry): string {
   const { action: _action, ...rest } = meta
   if (!Object.keys(rest).length) return '{}'
@@ -71,6 +77,8 @@ export function AgentPublishModal({
   const [notes, setNotes] = useState(initialNotes)
   const [result, setResult] = useState<AgentPublishResponse | null>(null)
   const [active, setActive] = useState<ActiveAction>(null)
+  const [licenseCode, setLicenseCode] = useState<LicenseCode>('MIT')
+  const [customLicenseText, setCustomLicenseText] = useState('')
 
   const formRef = useRef<HTMLFormElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -81,13 +89,31 @@ export function AgentPublishModal({
 
   const isPreviewing = active === 'preview'
   const isPublishing = active === 'publish'
-  const auditEntries = result?.audit_sample || []
+
+  const licenseText = useMemo(() => {
+    if (licenseCode !== 'CUSTOM') return undefined
+    const trimmed = customLicenseText.trim()
+    return trimmed.length ? trimmed : undefined
+  }, [licenseCode, customLicenseText])
+
+  const previewResult = useMemo<AgentPreviewResult | null>(() => {
+    if (!result) return null
+    return {
+      ...result,
+      license_code: licenseCode,
+      ...(licenseText ? { license_text: licenseText } : {}),
+    }
+  }, [result, licenseCode, licenseText])
+
+  const auditEntries = previewResult?.audit_sample || []
 
   useEffect(() => {
     if (!open) return
     setArtifactUrl(initialArtifactUrl)
     setNotes(initialNotes)
     setResult(null)
+    setLicenseCode('MIT')
+    setCustomLicenseText('')
   }, [open, initialArtifactUrl, initialNotes])
 
   useEffect(() => {
@@ -231,7 +257,11 @@ export function AgentPublishModal({
         force: result.decision === 'review',
       })
       setResult(data)
-      onPublished?.(data)
+      onPublished?.({
+        ...data,
+        license_code: licenseCode,
+        ...(licenseText ? { license_text: licenseText } : {}),
+      })
       const routeSlug = data.route?.slug
       const decisionLabel = routeSlug ? `Route ${routeSlug} minted` : 'Release published'
       pushToast(decisionLabel, 'ok')
@@ -330,6 +360,13 @@ export function AgentPublishModal({
             </form>
           </section>
 
+          <LicenseStep
+            selected={licenseCode}
+            customText={customLicenseText}
+            onSelect={setLicenseCode}
+            onCustomChange={setCustomLicenseText}
+          />
+
           <section className="agent-section" aria-label="Actions">
             <div>
               <h3 className="agent-section__title">Actions</h3>
@@ -347,7 +384,7 @@ export function AgentPublishModal({
                 </button>
                 <button
                   type="button"
-                  disabled={!result || isPublishing}
+                  disabled={!previewResult || isPublishing}
                   onClick={handlePublish}
                 >
                   {isPublishing ? 'Publishing...' : 'Publish'}
@@ -368,20 +405,29 @@ export function AgentPublishModal({
               <p className="agent-section__description">Release details, minted slug, and audit breadcrumbs from the agent.</p>
             </div>
 
-            {result ? (
+            {previewResult ? (
               <>
                 <div className="agent-results__grid">
                   <div className="agent-card">
                     <span className="agent-card__label">Decision</span>
-                    <span className="agent-card__value">{formatDecision(result.decision)}</span>
+                    <span className="agent-card__value">{formatDecision(previewResult.decision)}</span>
                     <span className="agent-card__label">Version</span>
-                    <span className="agent-card__value">{result.release.version}</span>
+                    <span className="agent-card__value">{previewResult.release.version}</span>
                     <span className="agent-card__label">Artifact</span>
-                    <span className="agent-card__value agent-card__value--muted">{result.release.artifact_url}</span>
-                    {result.release.notes ? (
+                    <span className="agent-card__value agent-card__value--muted">{previewResult.release.artifact_url}</span>
+                    <span className="agent-card__label">License</span>
+                    <span className="agent-card__value">
+                      <span className="license-preview">
+                        <LicenseBadge code={previewResult.license_code} />
+                        {previewResult.license_text ? (
+                          <span className="license-preview__text">{previewResult.license_text}</span>
+                        ) : null}
+                      </span>
+                    </span>
+                    {previewResult.release.notes ? (
                       <>
                         <span className="agent-card__label">Notes</span>
-                        <span className="agent-card__value agent-card__value--muted">{result.release.notes}</span>
+                        <span className="agent-card__value agent-card__value--muted">{previewResult.release.notes}</span>
                       </>
                     ) : null}
                   </div>
@@ -389,10 +435,12 @@ export function AgentPublishModal({
                   <div className="agent-card">
                     <span className="agent-card__label">Route slug</span>
                     <span className="agent-card__value">
-                      {result.route?.slug ? result.route.slug : 'Route will mint on publish'}
+                      {previewResult.route?.slug ? previewResult.route.slug : 'Route will mint on publish'}
                     </span>
                     <span className="agent-card__label">Target URL</span>
-                    <span className="agent-card__value agent-card__value--muted">{result.route?.target_url || result.release.artifact_url}</span>
+                    <span className="agent-card__value agent-card__value--muted">
+                      {previewResult.route?.target_url || previewResult.release.artifact_url}
+                    </span>
                     <span className="agent-card__label">Project</span>
                     <span className="agent-card__value agent-card__value--muted">{projectName || `#${projectId}`}</span>
                   </div>
@@ -417,8 +465,8 @@ export function AgentPublishModal({
                   )}
                 </div>
 
-                {result.similar_releases?.length ? (
-                  <SimilarReleases items={result.similar_releases} />
+                {previewResult.similar_releases?.length ? (
+                  <SimilarReleases items={previewResult.similar_releases} />
                 ) : null}
               </>
             ) : (
