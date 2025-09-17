@@ -83,7 +83,12 @@ def auth_callback(token: str, request: Request, db: Session = Depends(get_db)):
 
     user = get_or_create_user_by_email(db, email=email)
 
-    response = RedirectResponse(url="/app", status_code=302)
+    # In dev mode, redirect to the frontend dev server instead of backend /app
+    redirect_url = "/app"
+    if not is_email_enabled():  # Dev mode - redirect to frontend
+        redirect_url = "http://localhost:5174/app"
+    
+    response = RedirectResponse(url=redirect_url, status_code=302)
     set_cookie(response, request, {"user_id": user.id, "email": user.email, "name": user.name})
     logger.info("User login success id=%s email=%s", user.id, user.email)
     return response
