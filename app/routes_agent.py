@@ -5,7 +5,7 @@ import re
 import uuid
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +15,9 @@ from .db import get_db
 from . import models
 from .search import search_similar_releases
 from .errors import json_error
+from .middleware import get_request_user
+from .auth.magic import is_auth_enabled
+from .auth.accounts import ensure_demo_user
 
 logger = logging.getLogger("routeforge.agent")
 
@@ -67,8 +70,23 @@ def _compute_embedding_if_enabled(text_value: str) -> Optional[bytes]:
     return payload
 
 
+def _require_actor(request: Request, db: Session) -> Optional[Dict[str, Any]]:
+    user = get_request_user(request)
+    if is_auth_enabled():
+        return user
+
+    demo = ensure_demo_user(db)
+    demo_user: Dict[str, Any] = {"user_id": int(demo.id), "email": demo.email, "name": demo.name}
+    request.state.user = demo_user
+    return demo_user
+
+
 @router.post("/publish")
-def agent_publish(payload: Dict[str, Any], db: Session = Depends(get_db)):
+def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depends(get_db)):
+    actor = _require_actor(request, db)
+    if is_auth_enabled() and actor is None:
+        return error("auth_required", status_code=401)
+
     # Validate inputs
     try:
         project_id = int(payload.get("project_id"))
@@ -85,6 +103,9 @@ def agent_publish(payload: Dict[str, Any], db: Session = Depends(get_db)):
     project = db.get(models.Project, project_id)
     if project is None:
         return error("project_not_found", status_code=404)
+
+    if actor is not None and project.user_id != int(actor.get("user_id")):
+        return error("forbidden", status_code=403)
 
     # 1) Ingest staging
     staging = models.ReleasesStaging(artifact_url=artifact_url, notes=notes)
@@ -133,7 +154,7 @@ def agent_publish(payload: Dict[str, Any], db: Session = Depends(get_db)):
         decision = "dry_run"
     else:
         # Create release
-        release = models.Release(**release_dict)
+        release = models.Release(user_id=int(actor["user_id"]) if actor else project.user_id, **release_dict)
         embed = _compute_embedding_if_enabled(notes or artifact_url)
         if embed is not None:
             release.embedding = embed
@@ -160,6 +181,7 @@ def agent_publish(payload: Dict[str, Any], db: Session = Depends(get_db)):
             slug=slug,
             target_url=artifact_url,
             release_id=release.id,
+            user_id=int(actor["user_id"]) if actor else project.user_id,
         )
         db.add(route)
         try:
@@ -199,5 +221,3 @@ def agent_publish(payload: Dict[str, Any], db: Session = Depends(get_db)):
             ],
         },
     )
-
-

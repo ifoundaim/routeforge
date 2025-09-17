@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .demo_flags import is_demo
+from .middleware import get_request_user
+from .auth.magic import is_auth_enabled
 
 
 router = APIRouter(prefix="/api", tags=["attest"])
@@ -41,7 +43,10 @@ def read_demo_mode() -> DemoModeResponse:
 
 
 @router.post("/releases/{release_id}/attest", response_model=AttestResponse)
-def demo_attest_release(release_id: int, payload: AttestRequest) -> AttestResponse:
+def demo_attest_release(release_id: int, payload: AttestRequest, request: Request) -> AttestResponse:
+    if is_auth_enabled() and get_request_user(request) is None:
+        raise HTTPException(status_code=401, detail="auth_required")
+
     if not is_demo():
         raise HTTPException(status_code=501, detail="Attestation flow not implemented")
 

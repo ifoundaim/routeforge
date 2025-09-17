@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, cast
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select, func
@@ -10,9 +10,10 @@ from starlette.responses import Response
 
 from .db import get_db
 from . import models, schemas
-from .middleware import json_error_response
+from .middleware import get_request_user, json_error_response
 from .utils.validators import slugify, validate_target_url
-from .auth.magic import SessionUser, get_session_user, is_auth_enabled
+from .auth.magic import SessionUser, is_auth_enabled
+from .auth.accounts import ensure_demo_user
 
 
 logger = logging.getLogger("routeforge.api")
@@ -30,28 +31,34 @@ def _get_allowed_target_schemes() -> Tuple[str, ...]:
     return cleaned or ("https", "http")
 
 
-def _require_session(request: Request) -> Tuple[Optional[SessionUser], Optional[Response]]:
-    if not is_auth_enabled():
-        return None, None
+def _require_user(request: Request, db: Session) -> Tuple[SessionUser, Optional[Response]]:
+    user = get_request_user(request)
+    if is_auth_enabled():
+        if user is None:
+            failure = error(request, "auth_required", status_code=401, detail="Authentication required.")
+            return cast(SessionUser, {}), failure
+        return cast(SessionUser, user), None
 
-    user = get_session_user(request)
-    if user is None:
-        return None, error(request, "auth_required", status_code=401, detail="Authentication required.")
-
-    return user, None
+    demo = ensure_demo_user(db)
+    demo_user: SessionUser = {
+        "user_id": int(demo.id),
+        "email": demo.email,
+        "name": demo.name,
+    }
+    request.state.user = demo_user
+    return demo_user, None
 
 
 @router.post("/projects", response_model=schemas.ProjectOut, status_code=201)
 def create_project(payload: schemas.ProjectCreate, request: Request, db: Session = Depends(get_db)):
-    session_user, failure = _require_session(request)
+    session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
 
     project_data = payload.model_dump()
-    if session_user is not None:
-        project_data["owner"] = session_user["email"]
+    project_data["owner"] = session_user["email"]
 
-    project = models.Project(**project_data)
+    project = models.Project(user_id=int(session_user["user_id"]), **project_data)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -60,18 +67,18 @@ def create_project(payload: schemas.ProjectCreate, request: Request, db: Session
 
 @router.post("/releases", response_model=schemas.ReleaseOut, status_code=201)
 def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session = Depends(get_db)):
-    session_user, failure = _require_session(request)
+    session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
 
     project = db.get(models.Project, payload.project_id)
     if project is None:
         return error(request, "project_not_found", status_code=404)
-
-    if session_user is not None and project.owner != session_user["email"]:
+    if project.user_id != int(session_user["user_id"]):
         return error(request, "forbidden", status_code=403, detail="Project ownership mismatch.")
 
-    release = models.Release(**payload.model_dump())
+    release_data = payload.model_dump()
+    release = models.Release(user_id=int(session_user["user_id"]), **release_data)
     db.add(release)
     db.commit()
     db.refresh(release)
@@ -80,7 +87,7 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
 
 @router.post("/routes", response_model=schemas.RouteOut, status_code=201)
 def create_route(payload: schemas.RouteCreate, request: Request, db: Session = Depends(get_db)):
-    session_user, failure = _require_session(request)
+    session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
 
@@ -89,7 +96,7 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
     if project is None:
         return error(request, "project_not_found", status_code=404)
 
-    if session_user is not None and project.owner != session_user["email"]:
+    if project.user_id != int(session_user["user_id"]):
         return error(request, "forbidden", status_code=403, detail="Project ownership mismatch.")
 
     if payload.release_id is not None:
@@ -124,7 +131,7 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
     route_data = payload.model_dump()
     route_data["slug"] = sanitized_slug
     route_data["target_url"] = normalized_url
-    new_route = models.Route(**route_data)
+    new_route = models.Route(user_id=int(session_user["user_id"]), **route_data)
     db.add(new_route)
     try:
         db.commit()
@@ -138,8 +145,15 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
 
 @router.get("/releases/{release_id}", response_model=schemas.ReleaseDetailOut)
 def get_release_detail(release_id: int, request: Request, db: Session = Depends(get_db)):
+    session_user, failure = _require_user(request, db)
+    if failure is not None:
+        return failure
+
     release = db.get(models.Release, release_id)
     if release is None:
+        return error(request, "not_found", status_code=404)
+
+    if release.user_id != int(session_user["user_id"]):
         return error(request, "not_found", status_code=404)
 
     # eager load project for response
@@ -166,8 +180,15 @@ def get_release_detail(release_id: int, request: Request, db: Session = Depends(
 
 @router.get("/routes/{route_id}/hits")
 def get_route_hits(route_id: int, request: Request, db: Session = Depends(get_db)):
+    session_user, failure = _require_user(request, db)
+    if failure is not None:
+        return failure
+
     exists = db.get(models.Route, route_id)
     if exists is None:
+        return error(request, "not_found", status_code=404)
+
+    if exists.user_id != int(session_user["user_id"]):
         return error(request, "not_found", status_code=404)
 
     count = db.scalar(select(func.count(models.RouteHit.id)).where(models.RouteHit.route_id == route_id))

@@ -106,6 +106,21 @@ GET /r/{slug} --> 302 --> target_url
 - `LOG_LEVEL`: default `INFO`
 - `RATE_LIMIT_BURST`: per-IP burst tokens (default `10`)
 - `RATE_LIMIT_WINDOW_SEC`: token bucket window in seconds (default `10`)
+- `AUTH_ENABLED`: set to `1` to require magic-link login and scoped data access
+- `SESSION_SECRET`: required when auth is enabled; signs the `routeforge_session` cookie
+- `APP_BASE_URL`: required when auth is enabled; used to build callback URLs (e.g. `http://localhost:8000`)
+- `EMAIL_ENABLED`: default `0`; when `1` the issued magic link is still logged (no provider integration)
+
+## Accounts & Sessions
+
+- Users live in a dedicated `users` table (`id`, `email`, `name`, `created_at`). The migration adds a demo account (`demo@routeforge.local`) and scopes existing data by backfilling `projects.user_id`, `releases.user_id`, and `routes.user_id`.
+- Endpoints:
+  - `POST /auth/request-link` with `{ "email": "me@example.com" }` issues a 10-minute, single-use token (the full callback URL is always logged; no external email provider required).
+  - `GET /auth/callback?token=...` verifies the token, upserts the user, and redirects to `/app` after setting an HttpOnly `routeforge_session` cookie (SameSite=Lax; `Secure` when `APP_BASE_URL` is not localhost).
+  - `GET /auth/me` returns `{ "email", "name" }` for the current session; `POST /auth/logout` clears the cookie.
+  - `GET /auth/dev-login?email=you@example.com` remains for local testing and simply logs the callback URL.
+- All write endpoints now require an authenticated user. Analytics, exports, and entity detail reads return only the calling user's data (public redirects remain unauthenticated).
+- Session cookies expire after 12 hours. Clearing the cookie or letting it expire will return a 401 (`{ "error": "auth_required" }`) from protected endpoints until a new magic link is redeemed.
 
 ## API Summary
 
@@ -121,6 +136,10 @@ GET /r/{slug} --> 302 --> target_url
 - `GET /api/routes/{id}/stats` → per-route analytics
 - `GET /api/routes/{id}/export.csv` → CSV stream of recent hits
 - `POST /agent/publish` → agent publish workflow
+- `POST /auth/request-link` → issue a magic login URL (logged to the console)
+- `GET /auth/callback` → redeem magic link, set cookie, redirect to `/app`
+- `GET /auth/me` → session profile `{ email, name }`
+- `POST /auth/logout` → clear the session cookie
 
 ## Billing (Demo Flags)
 

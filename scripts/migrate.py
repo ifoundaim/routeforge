@@ -25,6 +25,7 @@ def main():
 
     from app.db import get_engine
     from app.models import Base
+    from app.db.migrate_accounts import migrate as migrate_accounts
 
     dsn = args.dsn or os.getenv("TIDB_DSN")
     if not dsn:
@@ -33,6 +34,8 @@ def main():
     engine = get_engine(dsn)
     logger.info("Ensuring base tables via SQLAlchemy metadata...")
     Base.metadata.create_all(engine)
+    logger.info("Running accounts migration (users + user_id backfill)...")
+    migrate_accounts(dsn)
 
     with engine.begin() as conn:
         # releases_staging
@@ -109,5 +112,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

@@ -1,29 +1,32 @@
-import hashlib
+"""Magic-link manager and session cookie helpers."""
+
+from __future__ import annotations
+
 import logging
 import os
 import threading
 from typing import Optional, Set, TypedDict, cast
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 from starlette.types import ASGIApp
 
 
 logger = logging.getLogger("routeforge.auth")
 
-router = APIRouter(prefix="/auth", tags=["auth"])
-
 SESSION_COOKIE_NAME = "routeforge_session"
-SESSION_MAX_AGE = 60 * 60 * 12  # 12 hours for demo
-TOKEN_TTL_SECONDS = 60 * 5  # magic links valid for 5 minutes
-SERIALIZER_SALT = "routeforge.magiclink.v1"
+SESSION_MAX_AGE = 60 * 60 * 12  # 12 hours
+TOKEN_TTL_SECONDS = 60 * 10  # magic links valid for 10 minutes
+MAGIC_SERIALIZER_SALT = "routeforge.magiclink.v2"
+SESSION_SERIALIZER_SALT = "routeforge.session.v1"
 
 
-class SessionUser(TypedDict):
+class SessionUser(TypedDict, total=False):
+    user_id: int
     email: str
-    user_id: str
+    name: Optional[str]
 
 
 class MagicLinkError(Exception):
@@ -42,30 +45,79 @@ class UsedMagicLink(MagicLinkError):
     """Raised when a token has already been redeemed."""
 
 
-class MagicAuthManager:
-    """Simple in-memory manager for issuing and consuming magic links."""
+def is_auth_enabled() -> bool:
+    return os.getenv("AUTH_ENABLED", "0") == "1"
 
-    def __init__(self, secret_key: str, token_ttl: int = TOKEN_TTL_SECONDS) -> None:
-        self._serializer = URLSafeTimedSerializer(secret_key=secret_key, salt=SERIALIZER_SALT)
-        self._token_ttl = token_ttl
+
+def is_email_enabled() -> bool:
+    return os.getenv("EMAIL_ENABLED", "0") == "1"
+
+
+def _session_secret() -> str:
+    secret = os.getenv("SESSION_SECRET")
+    if not secret:
+        raise RuntimeError("SESSION_SECRET must be set when auth is enabled")
+    return secret
+
+
+def _app_base_url() -> str:
+    base = os.getenv("APP_BASE_URL")
+    if not base:
+        raise RuntimeError("APP_BASE_URL must be set when auth is enabled")
+    cleaned = base.rstrip("/")
+    if not cleaned:
+        raise RuntimeError("APP_BASE_URL is invalid")
+    return cleaned
+
+
+def _looks_like_localhost(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return True
+
+    host = (parsed.hostname or "").lower()
+    if host in {"localhost", "127.0.0.1", "0.0.0.0"}:
+        return True
+    if host.endswith(".local"):
+        return True
+    return False
+
+
+class MagicAuthManager:
+    """Manage magic-link tokens and session cookies."""
+
+    def __init__(self, secret_key: str, app_base_url: str) -> None:
+        self._link_serializer = URLSafeTimedSerializer(secret_key=secret_key, salt=MAGIC_SERIALIZER_SALT)
+        self._session_serializer = URLSafeTimedSerializer(secret_key=secret_key, salt=SESSION_SERIALIZER_SALT)
+        self._token_ttl = TOKEN_TTL_SECONDS
+        self._session_max_age = SESSION_MAX_AGE
         self._issued: Set[str] = set()
         self._lock = threading.Lock()
+        self._base_url = app_base_url
+        self._secure_cookie = not _looks_like_localhost(app_base_url)
 
-    def issue_link(self, request: Request, email: str) -> str:
-        normalized = email.strip().lower()
+    @property
+    def secure_cookie(self) -> bool:
+        return self._secure_cookie
+
+    def issue_link(self, email: str) -> str:
+        normalized = (email or "").strip().lower()
         if not normalized:
             raise ValueError("email is required")
 
-        token = self._serializer.dumps({"email": normalized})
+        token = self._link_serializer.dumps({"email": normalized})
         with self._lock:
             self._issued.add(token)
 
-        base = str(request.url_for("magic_auth_callback"))
-        return f"{base}?token={token}"
+        return f"{self._base_url}/auth/callback?token={token}"
 
-    def consume(self, token: str) -> SessionUser:
+    def consume(self, token: str) -> str:
+        if not token:
+            raise InvalidMagicLink
+
         try:
-            data = self._serializer.loads(token, max_age=self._token_ttl)
+            data = self._link_serializer.loads(token, max_age=self._token_ttl)
         except SignatureExpired as exc:  # pragma: no cover - simple control flow
             raise ExpiredMagicLink from exc
         except BadSignature as exc:  # pragma: no cover - simple control flow
@@ -76,26 +128,86 @@ class MagicAuthManager:
                 raise UsedMagicLink
             self._issued.remove(token)
 
-        email = data.get("email")
-        if not isinstance(email, str) or not email:
+        email = data.get("email") if isinstance(data, dict) else None
+        normalized = (email or "").strip().lower()
+        if not normalized:
             raise InvalidMagicLink
 
-        normalized = email.strip().lower()
-        user_id = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        return {"email": normalized, "user_id": user_id}
+        return normalized
 
+    def encode_session(self, user: SessionUser) -> str:
+        user_id_raw = user.get("user_id")
+        if user_id_raw is None:
+            raise ValueError("user_id is required for the session cookie")
+        try:
+            user_id = int(user_id_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("user_id must be an integer") from exc
 
-def is_auth_enabled() -> bool:
-    return os.getenv("AUTH_ENABLED", "0") == "1"
+        email = (user.get("email") or "").strip().lower()
+        if not email:
+            raise ValueError("email is required for the session cookie")
 
+        payload = {"user_id": user_id, "email": email}
+        name = user.get("name")
+        if isinstance(name, str) and name.strip():
+            payload["name"] = name.strip()
 
-def _session_secret() -> str:
-    explicit = os.getenv("AUTH_SESSION_SECRET")
-    if explicit:
-        return explicit
+        return self._session_serializer.dumps(payload)
 
-    # Fall back to any existing secret and finally a hard-coded dev value.
-    return os.getenv("SESSION_SECRET") or os.getenv("SECRET_KEY") or "routeforge-dev-secret"
+    def decode_session(self, raw: str) -> Optional[SessionUser]:
+        if not raw:
+            return None
+        try:
+            data = self._session_serializer.loads(raw, max_age=self._session_max_age)
+        except (BadSignature, SignatureExpired):  # pragma: no cover - defensive path
+            logger.info("Rejected invalid session cookie")
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        user_id = data.get("user_id")
+        email = data.get("email")
+        try:
+            user_id_int = int(user_id)
+        except (TypeError, ValueError):
+            return None
+
+        if not isinstance(email, str) or not email:
+            return None
+
+        name_val = data.get("name")
+        name = name_val if isinstance(name_val, str) and name_val.strip() else None
+        return cast(SessionUser, {"user_id": user_id_int, "email": email.strip().lower(), "name": name})
+
+    def set_cookie(self, response: Response, user: SessionUser) -> None:
+        value = self.encode_session(user)
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=value,
+            max_age=self._session_max_age,
+            expires=self._session_max_age,
+            httponly=True,
+            secure=self._secure_cookie,
+            samesite="lax",
+            path="/",
+        )
+
+    def clear_cookie(self, response: Response) -> None:
+        response.delete_cookie(
+            key=SESSION_COOKIE_NAME,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=self._secure_cookie,
+        )
+
+    def read_cookie(self, request: Request) -> Optional[SessionUser]:
+        raw = request.cookies.get(SESSION_COOKIE_NAME)
+        if not raw:
+            return None
+        return self.decode_session(raw)
 
 
 def ensure_magic(app: ASGIApp) -> Optional[MagicAuthManager]:
@@ -111,20 +223,12 @@ def ensure_magic(app: ASGIApp) -> Optional[MagicAuthManager]:
         return existing
 
     secret = _session_secret()
-    manager = MagicAuthManager(secret)
-
-    if hasattr(app, "add_middleware"):
-        app.add_middleware(
-            SessionMiddleware,
-            secret_key=secret,
-            session_cookie=SESSION_COOKIE_NAME,
-            max_age=SESSION_MAX_AGE,
-            same_site="lax",
-            https_only=False,
-        )
-
-    state.magic_auth = manager
-    logger.info("Magic auth enabled; session cookie '%s' active", SESSION_COOKIE_NAME)
+    base_url = _app_base_url()
+    manager = MagicAuthManager(secret_key=secret, app_base_url=base_url)
+    setattr(state, "magic_auth", manager)
+    logger.info(
+        "Magic auth enabled; session cookie '%s' secure=%s", SESSION_COOKIE_NAME, manager.secure_cookie
+    )
     return manager
 
 
@@ -132,66 +236,39 @@ def get_magic_manager(request: Request) -> Optional[MagicAuthManager]:
     manager = getattr(request.app.state, "magic_auth", None)
     if isinstance(manager, MagicAuthManager):
         return manager
-    return None
+    return ensure_magic(request.app)
 
 
-def set_session_user(request: Request, user: SessionUser) -> None:
-    try:
-        session = request.session
-    except RuntimeError:  # pragma: no cover - SessionMiddleware guarantees availability when enabled
-        raise HTTPException(status_code=500, detail="session_unavailable")
+def request_link(request: Request, email: str) -> str:
+    manager = ensure_magic(request.app)
+    if manager is None:
+        raise RuntimeError("Auth system is disabled")
+    return manager.issue_link(email)
 
-    session["user"] = dict(user)
+
+def verify_token(request: Request, token: str) -> str:
+    manager = get_magic_manager(request)
+    if manager is None:
+        raise RuntimeError("Auth system is disabled")
+    return manager.consume(token)
+
+
+def set_cookie(response: Response, request: Request, user: SessionUser) -> None:
+    manager = ensure_magic(request.app)
+    if manager is None:
+        raise RuntimeError("Auth system is disabled")
+    manager.set_cookie(response, user)
+
+
+def clear_cookie(response: Response, request: Request) -> None:
+    manager = get_magic_manager(request)
+    if manager is None:
+        return
+    manager.clear_cookie(response)
 
 
 def get_session_user(request: Request) -> Optional[SessionUser]:
-    try:
-        raw_session = request.session
-    except RuntimeError:
-        return None
-
-    raw = raw_session.get("user")
-    if not isinstance(raw, dict):
-        return None
-
-    email = raw.get("email")
-    user_id = raw.get("user_id")
-    if not isinstance(email, str) or not isinstance(user_id, str):
-        return None
-
-    # SessionMiddleware returns mutable dict, but we only expose typed view.
-    return cast(SessionUser, {"email": email, "user_id": user_id})
-
-
-@router.get("/dev-login")
-def dev_login(request: Request, email: str) -> PlainTextResponse:
     manager = get_magic_manager(request)
     if manager is None:
-        raise HTTPException(status_code=404, detail="not_found")
-
-    try:
-        magic_url = manager.issue_link(request, email)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    logger.info("Dev magic login URL for %s: %s", email.strip().lower(), magic_url)
-    return PlainTextResponse("Magic link generated; check server logs.")
-
-
-@router.get("/magic", name="magic_auth_callback")
-def magic_callback(request: Request, token: str) -> JSONResponse:
-    manager = get_magic_manager(request)
-    if manager is None:
-        raise HTTPException(status_code=404, detail="not_found")
-
-    try:
-        user = manager.consume(token)
-    except ExpiredMagicLink:
-        raise HTTPException(status_code=400, detail="expired_token")
-    except UsedMagicLink:
-        raise HTTPException(status_code=400, detail="token_already_used")
-    except InvalidMagicLink:
-        raise HTTPException(status_code=400, detail="invalid_token")
-
-    set_session_user(request, user)
-    return JSONResponse({"detail": "login_ok"})
+        return None
+    return manager.read_cookie(request)

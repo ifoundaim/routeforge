@@ -28,6 +28,7 @@ def main():
     from sqlalchemy.orm import sessionmaker
     from app.db import get_engine
     from app.models import Project, Release, Route
+    from app.auth.accounts import ensure_demo_user
 
     dsn = args.dsn or os.getenv("TIDB_DSN")
     if not dsn:
@@ -39,15 +40,25 @@ def main():
 
     try:
         if args.demo == "basic":
+            demo_user = ensure_demo_user(db)
+
             # Get-or-create project by name to be idempotent
             project = db.execute(
                 select(Project)
-                .where(Project.name == "RouteForge Demo")
+                .where(
+                    Project.name == "RouteForge Demo",
+                    Project.user_id == demo_user.id,
+                )
                 .order_by(Project.id.asc())
                 .limit(1)
             ).scalars().first()
             if project is None:
-                project = Project(name="RouteForge Demo", owner="routeforge", description="Demo project")
+                project = Project(
+                    name="RouteForge Demo",
+                    owner=demo_user.email,
+                    description="Demo project",
+                    user_id=demo_user.id,
+                )
                 db.add(project)
                 db.commit()
                 db.refresh(project)
@@ -65,6 +76,7 @@ def main():
                     version="1.0.0",
                     artifact_url="https://example.com/artifacts/routeforge-1.0.0.tgz",
                     notes="Initial demo release",
+                    user_id=demo_user.id,
                 )
                 db.add(release)
                 db.commit()
@@ -83,6 +95,7 @@ def main():
                     slug="demo",
                     target_url="https://example.com/downloads/routeforge/latest",
                     release_id=release.id,
+                    user_id=demo_user.id,
                 )
                 db.add(route)
                 db.commit()
@@ -103,5 +116,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

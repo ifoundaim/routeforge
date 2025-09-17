@@ -97,3 +97,11 @@ def now_utc() -> datetime:
     """Return a timezone-aware UTC datetime (for consistency in logs)."""
     return datetime.now(timezone.utc)
 
+
+__all__ = [
+    "get_engine",
+    "get_db",
+    "try_get_session",
+    "execute_scalar",
+    "now_utc",
+]

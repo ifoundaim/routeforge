@@ -30,6 +30,8 @@ def _resolve_user_id(request: Request) -> Optional[str]:
         return None
 
     user_id = session_user.get("user_id")
+    if isinstance(user_id, int):
+        return str(user_id)
     if isinstance(user_id, str) and user_id.strip():
         return user_id
 
@@ -64,4 +66,3 @@ def upgrade_entitlement(payload: UpgradePayload, request: Request):
     value = set_pro(user_id, payload.pro)
     logger.info("Entitlement updated for %s -> pro=%s", user_id or "guest", value)
     return {"pro": value}
-

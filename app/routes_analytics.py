@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,9 @@ from .db import get_db, now_utc
 from .errors import json_error
 from . import models
 from .utils.enrich import decode_ref
+from .middleware import get_request_user
+from .auth.magic import is_auth_enabled
+from .auth.accounts import ensure_demo_user
 
 
 logger = logging.getLogger("routeforge.analytics")
@@ -47,17 +50,37 @@ def _coerce_ref(value: Optional[Any]) -> Optional[str]:
     return text or None
 
 
+def _require_user(request: Request, db: Session):
+    user = get_request_user(request)
+    if is_auth_enabled():
+        return user
+
+    demo = ensure_demo_user(db)
+    demo_user = {"user_id": int(demo.id), "email": demo.email, "name": demo.name}
+    request.state.user = demo_user
+    return demo_user
+
+
 @router.get("/stats/summary")
-def get_stats_summary(days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_stats_summary(request: Request, days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    user = _require_user(request, db)
+    if is_auth_enabled() and user is None:
+        return error("auth_required", status_code=401)
+
     window_days = _normalize_days(days)
     since = now_utc() - timedelta(days=window_days)
+    user_id = int(user.get("user_id")) if user else None
 
     total_clicks = db.scalar(
-        select(func.count(models.RouteHit.id)).where(models.RouteHit.ts >= since)
+        select(func.count(models.RouteHit.id))
+        .join(models.Route, models.Route.id == models.RouteHit.route_id)
+        .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
     ) or 0
 
     unique_routes = db.scalar(
-        select(func.count(func.distinct(models.RouteHit.route_id))).where(models.RouteHit.ts >= since)
+        select(func.count(func.distinct(models.RouteHit.route_id)))
+        .join(models.Route, models.Route.id == models.RouteHit.route_id)
+        .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
     ) or 0
 
     top_rows = db.execute(
@@ -67,7 +90,7 @@ def get_stats_summary(days: int = 7, db: Session = Depends(get_db)) -> Dict[str,
             func.count(models.RouteHit.id).label("clicks"),
         )
         .join(models.Route, models.Route.id == models.RouteHit.route_id)
-        .where(models.RouteHit.ts >= since)
+        .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
         .group_by(models.RouteHit.route_id, models.Route.slug)
         .order_by(desc("clicks"))
         .limit(10)
@@ -85,9 +108,16 @@ def get_stats_summary(days: int = 7, db: Session = Depends(get_db)) -> Dict[str,
 
 
 @router.get("/routes/{route_id}/stats")
-def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
+def get_route_stats(route_id: int, request: Request, days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    user = _require_user(request, db)
+    if is_auth_enabled() and user is None:
+        return error("auth_required", status_code=401)
+
     exists = db.get(models.Route, route_id)
     if exists is None:
+        return error("not_found", status_code=404)
+
+    if user is not None and exists.user_id != int(user.get("user_id")):
         return error("not_found", status_code=404)
 
     window_days = _normalize_days(days)
@@ -185,13 +215,20 @@ def get_route_stats(route_id: int, days: int = 7, db: Session = Depends(get_db))
 
 
 @router.get("/routes/{route_id}/hits/recent")
-def get_route_recent_hits(route_id: int, limit: int = 20, db: Session = Depends(get_db)):
+def get_route_recent_hits(route_id: int, request: Request, limit: int = 20, db: Session = Depends(get_db)):
     """Return the most recent N hits for a given route.
 
     The result is ordered by timestamp descending and includes minimal fields for UI display.
     """
+    user = _require_user(request, db)
+    if is_auth_enabled() and user is None:
+        return error("auth_required", status_code=401)
+
     exists = db.get(models.Route, route_id)
     if exists is None:
+        return error("not_found", status_code=404)
+
+    if user is not None and exists.user_id != int(user.get("user_id")):
         return error("not_found", status_code=404)
 
     # Normalize and clamp limit
@@ -229,4 +266,3 @@ def get_route_recent_hits(route_id: int, limit: int = 20, db: Session = Depends(
     ]
 
     return {"hits": hits}
-

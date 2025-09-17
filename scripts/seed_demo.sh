@@ -83,6 +83,7 @@ load_dotenv(os.path.join(repo_root, ".env"))
 
 from app.db import get_engine
 from app.models import Project, Release, Route, RouteHit
+from app.auth.accounts import ensure_demo_user
 
 DSN = os.environ["ROUTEFORGE_DEMO_DSN"]
 TARGET_HITS = int(os.environ.get("ROUTEFORGE_DEMO_TARGET_HITS", "150"))
@@ -164,9 +165,14 @@ def ensure_demo() -> Dict[str, object]:
     minted_ids: List[int] = []
 
     try:
+        demo_user = ensure_demo_user(session)
+
         project = session.execute(
             select(Project)
-            .where(Project.name == "RouteForge Demo")
+            .where(
+                Project.name == "RouteForge Demo",
+                Project.user_id == demo_user.id,
+            )
             .order_by(Project.id.asc())
             .limit(1)
         ).scalar_one_or_none()
@@ -176,21 +182,25 @@ def ensure_demo() -> Dict[str, object]:
         if project is None:
             project = Project(
                 name="RouteForge Demo",
-                owner="demo@routeforge.app",
+                owner=demo_user.email,
                 description="Golden demo workspace for RouteForge v1.0",
+                user_id=demo_user.id,
             )
             session.add(project)
             session.commit()
             session.refresh(project)
             project_created = True
         else:
-            desired_owner = "demo@routeforge.app"
+            desired_owner = demo_user.email
             desired_description = "Golden demo workspace for RouteForge v1.0"
             if project.owner != desired_owner:
                 project.owner = desired_owner
                 project_updated = True
             if project.description != desired_description:
                 project.description = desired_description
+                project_updated = True
+            if project.user_id != demo_user.id:
+                project.user_id = demo_user.id
                 project_updated = True
             if project_updated:
                 session.commit()
@@ -219,6 +229,7 @@ def ensure_demo() -> Dict[str, object]:
                     version=spec["version"],
                     artifact_url=spec["artifact_url"],
                     notes=spec["notes"],
+                    user_id=demo_user.id,
                 )
                 session.add(release)
                 session.commit()
@@ -230,6 +241,9 @@ def ensure_demo() -> Dict[str, object]:
                     updated = True
                 if release.notes != spec["notes"]:
                     release.notes = spec["notes"]
+                    updated = True
+                if release.user_id != demo_user.id:
+                    release.user_id = demo_user.id
                     updated = True
                 if updated:
                     session.commit()
@@ -262,6 +276,7 @@ def ensure_demo() -> Dict[str, object]:
                     release_id=release.id,
                     slug=spec["slug"],
                     target_url=spec["target_url"],
+                    user_id=demo_user.id,
                 )
                 session.add(route)
                 session.commit()
@@ -273,6 +288,9 @@ def ensure_demo() -> Dict[str, object]:
                     updated = True
                 if route.release_id != release.id:
                     route.release_id = release.id
+                    updated = True
+                if route.user_id != demo_user.id:
+                    route.user_id = demo_user.id
                     updated = True
                 if route.target_url != spec["target_url"]:
                     route.target_url = spec["target_url"]

@@ -3,7 +3,7 @@ import io
 import logging
 from typing import Iterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .errors import json_error
 from . import models
+from .middleware import get_request_user
+from .auth.magic import is_auth_enabled
+from .auth.accounts import ensure_demo_user
 
 
 logger = logging.getLogger("routeforge.export")
@@ -35,9 +38,21 @@ def _normalize_limit(raw_limit: int) -> int:
 
 
 @router.get("/routes/{route_id}/export.csv")
-def export_route_hits(route_id: int, limit: int = 1000, db: Session = Depends(get_db)):
+def export_route_hits(route_id: int, request: Request, limit: int = 1000, db: Session = Depends(get_db)):
+    user = get_request_user(request)
+    if is_auth_enabled():
+        if user is None:
+            return error("auth_required", status_code=401)
+    else:
+        demo = ensure_demo_user(db)
+        user = {"user_id": int(demo.id), "email": demo.email, "name": demo.name}
+        request.state.user = user
+
     route = db.get(models.Route, route_id)
     if route is None:
+        return error("not_found", status_code=404)
+
+    if user is not None and route.user_id != int(user.get("user_id")):
         return error("not_found", status_code=404)
 
     normalized_limit = _normalize_limit(limit)

@@ -17,10 +17,24 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), nullable=False, unique=True, index=True)
+    name = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    projects = relationship("Project", back_populates="user")
+    releases = relationship("Release", back_populates="user")
+    routes = relationship("Route", back_populates="user")
+
+
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     owner = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -28,12 +42,14 @@ class Project(Base):
 
     releases = relationship("Release", back_populates="project", cascade="all, delete-orphan")
     routes = relationship("Route", back_populates="project", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="projects")
 
 
 class Release(Base):
     __tablename__ = "releases"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     version = Column(String(64), nullable=False)
     notes = Column(Text, nullable=True)
@@ -45,6 +61,7 @@ class Release(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project = relationship("Project", back_populates="releases")
+    user = relationship("User", back_populates="releases")
 
 
 class Route(Base):
@@ -55,6 +72,7 @@ class Route(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     slug = Column(String(128), nullable=False)
     target_url = Column(String(2048), nullable=False)
@@ -64,6 +82,7 @@ class Route(Base):
     project = relationship("Project", back_populates="routes")
     release = relationship("Release")
     hits = relationship("RouteHit", back_populates="route", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="routes")
 
 
 class RouteHit(Base):
@@ -100,5 +119,4 @@ class Audit(Base):
     action = Column(String(64), nullable=False)
     meta = Column(JSON, nullable=True)
     ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
 

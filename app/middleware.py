@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.responses import JSONResponse, Response
 
 from .errors import json_error
+from .auth.magic import get_session_user, is_auth_enabled
 
 
 logger = logging.getLogger("routeforge.request")
@@ -66,6 +67,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
 
         start_time = time.perf_counter()
+        if is_auth_enabled():
+            try:
+                request.state.user = get_session_user(request)
+            except Exception:  # pragma: no cover - defensive guard around cookie parsing
+                request.state.user = None
+        else:
+            request.state.user = None
         try:
             if request.method == "OPTIONS":
                 response = Response(status_code=204)
@@ -105,3 +113,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 def get_request_id(request: Request) -> str:
     """Helper to read the request id from request.state, if set."""
     return getattr(request.state, "request_id", "")
+
+
+def get_request_user(request: Request):
+    """Helper to read the authenticated user from request.state if available."""
+    return getattr(request.state, "user", None)
