@@ -126,6 +126,27 @@ class OwnershipGuardsSmokeTests(unittest.TestCase):
         self.assertEqual(hidden_hits.status_code, 404, hidden_hits.text)
         self.assertEqual(hidden_hits.json()["error"], "not_found")
 
+    def test_project_creation_uses_session_user_id(self):
+        payload = {
+            "name": "Owned Project",
+            "owner": "someone@else.com",
+            "description": None,
+        }
+        response = self.client.post(
+            "/api/projects",
+            json=payload,
+            headers={"X-Test-User": "B"},
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        project_body = response.json()
+        project_id = project_body["id"]
+
+        with SessionLocal() as session:
+            project = session.get(models.Project, project_id)
+            self.assertIsNotNone(project)
+            self.assertEqual(project.user_id, TEST_USERS["B"]["user_id"])
+            self.assertEqual(project.owner, TEST_USERS["B"]["email"])
+
 
 if __name__ == "__main__":
     unittest.main()

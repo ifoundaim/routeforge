@@ -33,6 +33,9 @@ def create_user(db: Session, *, email: str, name: Optional[str] = None) -> model
     Raises a ValueError if the email is empty. If a unique constraint violation occurs,
     the existing user is returned.
     """
+    if email is None:
+        raise ValueError("email is required")
+    email = email.strip().lower()
     normalized = _normalize_email(email)
     user = models.User(email=normalized, name=name)
     db.add(user)
@@ -57,6 +60,9 @@ def get_or_create_user_by_email(
     db: Session, *, email: str, name: Optional[str] = None
 ) -> models.User:
     """Look up a user by email, creating a new record if needed."""
+    if email is None:
+        raise ValueError("email is required")
+    email = email.strip().lower()
     normalized = _normalize_email(email)
     existing = db.execute(select(models.User).where(models.User.email == normalized)).scalar_one_or_none()
     if existing is not None:
