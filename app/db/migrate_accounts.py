@@ -50,6 +50,13 @@ def _constraint_exists(conn, table: str, constraint: str) -> bool:
     return bool(result.scalar())
 
 
+def _drop_user_fk_if_exists(conn, table: str) -> None:
+    constraint_name = f"fk_{table}_user"
+    if _constraint_exists(conn, table, constraint_name):
+        logger.info("Dropping existing foreign key %s on %s.user_id", constraint_name, table)
+        conn.exec_driver_sql(f"ALTER TABLE {table} DROP FOREIGN KEY {constraint_name}")
+
+
 def _ensure_users_table(conn) -> None:
     logger.info("Ensuring users table exists...")
     conn.exec_driver_sql(
@@ -170,9 +177,11 @@ def migrate(dsn: Optional[str] = None) -> None:
         _backfill_releases(conn)
         _backfill_routes(conn)
 
+        # Drop stale FKs, enforce NOT NULL, then add indexes + FKs
         for table in ("projects", "releases", "routes"):
-            _ensure_user_indexes(conn, table)
+            _drop_user_fk_if_exists(conn, table)
             _enforce_not_null(conn, table)
+            _ensure_user_indexes(conn, table)
 
     logger.info("Accounts migration complete.")
 
