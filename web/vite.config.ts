@@ -9,7 +9,10 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8000',
       '/agent': 'http://localhost:8000',
-      '/r': 'http://localhost:8000'
+      '/r': 'http://localhost:8000',
+      // Auth & demo endpoints should also hit the FastAPI server
+      '/auth': 'http://localhost:8000',
+      '/dev': 'http://localhost:8000'
     }
   }
 })
