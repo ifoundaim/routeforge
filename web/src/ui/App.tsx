@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { UpgradeModal } from '../features/billing/UpgradeModal'
 import { useEntitlements } from '../features/billing/useEntitlements'
+import { Header } from '../components/Header'
 
 type Json = Record<string, unknown>
 
@@ -410,6 +411,7 @@ export function App() {
 
   return (
     <div className="container">
+      <Header />
       <div className="row" style={{ alignItems: 'center', marginBottom: 12, gap: 12 }}>
         <h1 style={{ margin: 0 }}>RouteForge</h1>
         <span className="muted">Demo SPA</span>

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 
 import { CTAButton } from '../components/CTAButton'
+import { Header } from '../components/Header'
 import '../styles/landing.css'
 
 export function Landing() {
@@ -39,15 +40,7 @@ export function Landing() {
 
   return (
     <div className="landing">
-      <header className="landing-header">
-        <div className="landing-brand">
-          <a href="/" aria-label="RouteForge home">RouteForge</a>
-        </div>
-        <nav aria-label="Primary">
-          <a className="landing-link" href="https://github.com/ifoundaim/routeforge" target="_blank" rel="noopener noreferrer">Repo</a>
-          <a className="landing-link" href="https://github.com/ifoundaim/routeforge/tree/main/docs" target="_blank" rel="noopener noreferrer">Docs</a>
-        </nav>
-      </header>
+      <Header />
 
       <main className="landing-main" id="main-content">
         <section className="landing-hero" aria-labelledby="landing-title">
