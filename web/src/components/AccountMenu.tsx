@@ -70,6 +70,7 @@ export function AccountMenu({ email }: AccountMenuProps) {
       setSessionUser(null)
       await refreshSession(true)
     }
+  }
   return (
     <div className="account-menu" ref={containerRef}>
       <button
