@@ -7,12 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .auth.magic import ensure_magic, is_auth_enabled, router as auth_router
 from .routes_api import router as api_router
+from .routes_attest import router as attest_router
 from .routes_redirect import router as redirect_router
 from .routes_agent import router as agent_router
 from .routes_analytics import router as analytics_router
 from .routes_billing import router as billing_router
 from .routes_export import router as export_router
 from .routes_health import router as health_router
+from .routes_ip import router as ip_router
 from .middleware import RequestContextMiddleware
 from .errors import install_exception_handlers
 
@@ -22,7 +24,7 @@ load_dotenv()
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("routeforge")
 
-app = FastAPI(title="RouteForge API", version="0.1.0")
+app = FastAPI(title="RouteForge API", version="1.0.0")
 
 # CORS: allow all for demo
 app.add_middleware(
@@ -41,11 +43,13 @@ install_exception_handlers(app)
 
 app.include_router(health_router)
 app.include_router(api_router)
+app.include_router(attest_router)
 app.include_router(redirect_router)
 app.include_router(agent_router)
 app.include_router(analytics_router)
 app.include_router(export_router)
 app.include_router(billing_router)
+app.include_router(ip_router)
 
 if is_auth_enabled():
     ensure_magic(app)

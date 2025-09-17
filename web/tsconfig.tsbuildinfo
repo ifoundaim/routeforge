@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/vite-env.d.ts","./src/components/ctabutton.tsx","./src/components/demobadge.tsx","./src/components/provenancemodal.tsx","./src/features/billing/upgrademodal.tsx","./src/features/billing/useentitlements.ts","./src/lib/api.ts","./src/pages/landing.tsx","./src/pages/release.tsx","./src/ui/app.tsx"],"version":"5.6.2"}

@@ -1,4 +1,4 @@
-.PHONY: run migrate seed fmt lint
+.PHONY: run migrate seed fmt lint demo-seed demo-validate demo-run
 
 run:
 	uvicorn app.app:app --reload --port $${PORT:-8000}
@@ -15,4 +15,12 @@ fmt:
 lint:
 	ruff check .
 
+demo-seed:
+	scripts/seed_demo.sh
+
+demo-validate:
+	scripts/validate_demo.sh
+
+demo-run:
+	scripts/demo_runner.sh
 
