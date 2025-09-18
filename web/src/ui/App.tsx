@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { UpgradeModal } from '../features/billing/UpgradeModal'
 import { useEntitlements } from '../features/billing/useEntitlements'
 import { Header } from '../components/Header'
+import { AppLayout } from '../pages/AppLayout'
+import { Dashboard } from '../pages/Dashboard'
+import { RouteDetail as RouteDetailPage } from '../pages/RouteDetail'
 
 type Json = Record<string, unknown>
 
@@ -65,6 +69,29 @@ function CopyButton({ text, onCopied }: { text: string; onCopied?: () => void })
       onCopied?.()
       setTimeout(() => setCopied(false), 1000)
     }}>{copied ? 'Copied' : 'Copy'}</button>
+  )
+}
+
+function AppRootRedirect() {
+  const location = useLocation()
+  const search = location.search || ''
+  return <Navigate to={`/app/dashboard${search}`} replace />
+}
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout>
+        <Routes>
+          <Route path="/app/dashboard" element={<Dashboard />} />
+          <Route path="/app/routes/:slug" element={<RouteDetailPage />} />
+          <Route path="/app/routes/id/:id" element={<RouteDetailPage />} />
+          <Route path="/app/setup" element={<LegacyDemoApp />} />
+          <Route path="/app" element={<AppRootRedirect />} />
+          <Route path="*" element={<AppRootRedirect />} />
+        </Routes>
+      </AppLayout>
+    </BrowserRouter>
   )
 }
 
@@ -272,7 +299,7 @@ function RoutesTable({
   )
 }
 
-function RouteDetail({ route, onClose, isPro, onRequirePro }: { route: RouteOut; onClose: () => void; isPro: boolean; onRequirePro: () => void }) {
+function LegacyRouteDetail({ route, onClose, isPro, onRequirePro }: { route: RouteOut; onClose: () => void; isPro: boolean; onRequirePro: () => void }) {
   const [hits, setHits] = useState<RouteHit[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -338,7 +365,7 @@ function RouteDetail({ route, onClose, isPro, onRequirePro }: { route: RouteOut;
   )
 }
 
-export function App() {
+function LegacyDemoApp() {
   const toast = useToast()
   const { pro, loading: entitlementsLoading, upgradeToPro, upgrading } = useEntitlements()
   const [upgradeOpen, setUpgradeOpen] = useState(false)
@@ -418,85 +445,89 @@ export function App() {
   }, [activeCopyUrl])
 
   return (
-    <div className="container">
+    <>
       <Header />
-      <div className="row" style={{ alignItems: 'center', marginBottom: 12, gap: 12 }}>
-        <h1 style={{ margin: 0 }}>RouteForge</h1>
-        <span className="muted">Demo SPA</span>
-        <div style={{ flex: 1 }} />
-        <ThemeToggle />
-        <span
-          className="chip"
-          style={{
-            backgroundColor: pro ? '#2563eb' : '#374151',
-            color: '#f9fafb',
-            display: 'inline-flex',
-            alignItems: 'center',
-          }}
-        >
-          {planLabel}
-        </span>
-        {!pro && (
-          <button className="primary" onClick={openUpgrade} disabled={upgrading}>
-            {upgradeButtonLabel}
-          </button>
-        )}
-        <button className="ghost" onClick={resetAll}>Reset</button>
-      </div>
-
-      <Section title="1) Create project" right={<span className="muted">Step 1</span>}>
-        {project ? (
-          <div className="row" style={{ alignItems: 'center' }}>
-            <span className="chip">{project.name}</span>
-            <span className="muted">owner: {project.owner}</span>
+      <main className="container">
+        <div className="row" style={{ alignItems: 'center', gap: 'var(--space-3)' }}>
+          <h1 style={{ margin: 0 }}>RouteForge</h1>
+          <span className="muted">Demo SPA</span>
+          <div style={{ flex: 1 }} />
+          <div className="present-hidden">
+            <ThemeToggle />
           </div>
-        ) : (
-          <CreateProjectStep onCreated={setProject} />
-        )}
-      </Section>
+          <span
+            className="chip present-hidden"
+            style={{
+              backgroundColor: pro ? 'var(--color-brand)' : 'rgba(148, 163, 184, 0.15)',
+              color: 'var(--color-text-strong)',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            {planLabel}
+          </span>
+          {!pro && (
+            <button className="primary present-hidden" onClick={openUpgrade} disabled={upgrading}>
+              {upgradeButtonLabel}
+            </button>
+          )}
+          <button type="button" className="ghost present-hidden" onClick={resetAll}>Reset</button>
+        </div>
 
-      <Section title="2) Create release" right={!project ? <span className="muted">Waiting for project</span> : <span className="muted">Step 2</span>}>
-        {project ? (
-          release ? (
+        <Section title="1) Create project" right={<span className="muted">Step 1</span>}>
+          {project ? (
             <div className="row" style={{ alignItems: 'center' }}>
-              <span className="chip">v{release.version}</span>
-              <a href={release.artifact_url} target="_blank" rel="noreferrer"><button>Artifact</button></a>
+              <span className="chip">{project.name}</span>
+              <span className="muted">owner: {project.owner}</span>
             </div>
           ) : (
-            <CreateReleaseStep project={project} onCreated={setRelease} />
-          )
-        ) : (
-          <div className="muted">No project yet. Create a project to continue.</div>
-        )}
-      </Section>
-
-      {selectedRoute && pro ? (
-        <RouteDetail
-          route={selectedRoute}
-          onClose={() => setSelectedRoute(null)}
-          isPro={pro}
-          onRequirePro={openUpgrade}
-        />
-      ) : (
-        <Section title="3) Create route" right={!project ? <span className="muted">Waiting for project</span> : !release ? <span className="muted">Optional: link release</span> : undefined}>
-          {project ? (
-            routes.length ? (
-              <RoutesTable
-                routes={routes}
-                isPro={pro}
-                onActiveRoute={setActiveCopyUrl}
-                onShowDetail={setSelectedRoute}
-                onCopied={() => toast.push('Copied route URL', 'ok')}
-                onRequirePro={openUpgrade}
-              />
-            ) : (
-              <CreateRouteStep project={project} release={release} onCreated={(r) => setRoutes([r])} />
-            )
-          ) : (
-            <div className="muted">No project yet. Create a project to start.</div>
+            <CreateProjectStep onCreated={setProject} />
           )}
         </Section>
-      )}
+
+        <Section title="2) Create release" right={!project ? <span className="muted">Waiting for project</span> : <span className="muted">Step 2</span>}>
+          {project ? (
+            release ? (
+              <div className="row" style={{ alignItems: 'center' }}>
+                <span className="chip">v{release.version}</span>
+                <a href={release.artifact_url} target="_blank" rel="noreferrer"><button>Artifact</button></a>
+              </div>
+            ) : (
+              <CreateReleaseStep project={project} onCreated={setRelease} />
+            )
+          ) : (
+            <div className="muted">No project yet. Create a project to continue.</div>
+          )}
+        </Section>
+
+        {selectedRoute && pro ? (
+          <LegacyRouteDetail
+            route={selectedRoute}
+            onClose={() => setSelectedRoute(null)}
+            isPro={pro}
+            onRequirePro={openUpgrade}
+          />
+        ) : (
+          <Section title="3) Create route" right={!project ? <span className="muted">Waiting for project</span> : !release ? <span className="muted">Optional: link release</span> : undefined}>
+            {project ? (
+              routes.length ? (
+                <RoutesTable
+                  routes={routes}
+                  isPro={pro}
+                  onActiveRoute={setActiveCopyUrl}
+                  onShowDetail={setSelectedRoute}
+                  onCopied={() => toast.push('Copied route URL', 'ok')}
+                  onRequirePro={openUpgrade}
+                />
+              ) : (
+                <CreateRouteStep project={project} release={release} onCreated={(r) => setRoutes([r])} />
+              )
+            ) : (
+              <div className="muted">No project yet. Create a project to start.</div>
+            )}
+          </Section>
+        )}
+      </main>
 
       <UpgradeModal
         open={upgradeOpen}
@@ -505,6 +536,6 @@ export function App() {
         upgrading={upgrading}
       />
       {toast.view}
-    </div>
+    </>
   )
 }
