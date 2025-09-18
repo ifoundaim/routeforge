@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import { DemoBadge } from '../components/DemoBadge'
+import { LicenseBadge, type LicenseCode } from '../components/LicenseStep'
 import { ProvenanceModal } from '../components/ProvenanceModal'
+import { AttestActions } from '../components/provenance/AttestActions'
 import { apiGet, apiPost } from '../lib/api'
 import '../styles/provenance.css'
 
@@ -10,21 +12,15 @@ type ReleaseDetail = {
   version: string
   notes?: string | null
   artifact_url: string
+  artifact_sha256?: string | null
+  license_code?: LicenseCode | null
+  license_custom_text?: string | null
+  license_url?: string | null
   created_at: string
   project: { id: number; name: string }
 }
 
 type DemoModeResponse = { demo: boolean }
-type AttestResponse = {
-  release_id: number
-  sha256: string
-  network: string
-  tx_hash: string
-  token_id: number | null
-  metadata_uri: string | null
-  dry_run: boolean
-}
-
 type PrepareCopyrightResponse = {
   download_url: string
   receipt: string
@@ -33,7 +29,6 @@ type PrepareCopyrightResponse = {
 type Toast = { id: number; text: string; kind?: 'ok' | 'error' }
 
 type ModalState =
-  | { kind: 'attest'; mode: 'log' | 'nft'; status: 'loading' | 'success' | 'error'; data?: AttestResponse; error?: string }
   | { kind: 'copyright'; status: 'loading' | 'success' | 'error'; data?: PrepareCopyrightResponse; error?: string }
 
 function useToast() {
@@ -63,14 +58,13 @@ function Spinner() {
   return <span className="spinner" />
 }
 
-function CopyButton({ text, onCopied }: { text: string; onCopied?: () => void }) {
+function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
-      onCopied?.()
       setTimeout(() => setCopied(false), 1200)
     } catch {
       /* ignore clipboard errors */
@@ -86,28 +80,6 @@ function CopyButton({ text, onCopied }: { text: string; onCopied?: () => void })
       {copied ? 'Copied' : 'Copy'}
     </button>
   )
-}
-
-function makeDemoHex(seed: string, releaseId: number) {
-  const base = `${seed}${releaseId.toString(16).padStart(6, '0')}`
-  const repeated = base.repeat(5)
-  return (repeated + seed).slice(0, 64)
-}
-
-function buildDemoAttest(mode: 'log' | 'nft', releaseId: number): AttestResponse {
-  const txHash = makeDemoHex('9b4cfe1d3a7c', releaseId)
-  const digest = makeDemoHex('b1cd9463c8ed', releaseId)
-  const tokenId = mode === 'nft' ? releaseId * 1000 + 421 : null
-
-  return {
-    release_id: releaseId,
-    sha256: digest,
-    network: 'RouteChain Testnet',
-    tx_hash: `0x${txHash}`,
-    token_id: tokenId,
-    metadata_uri: tokenId ? `ipfs://demo.routeforge/releases/${releaseId}` : null,
-    dry_run: true,
-  }
 }
 
 function buildDemoPrepare(releaseId: number): PrepareCopyrightResponse {
@@ -179,31 +151,6 @@ export function Release() {
     }
   }, [releaseId])
 
-  const openAttest = (mode: 'log' | 'nft') => {
-    if (!releaseId) return
-
-    if (demoMode) {
-      const data = buildDemoAttest(mode, releaseId)
-      setModal({ kind: 'attest', mode, status: 'success', data })
-      const label = mode === 'nft' ? `Minted demo NFT token ${data.token_id}` : `Attested release (tx ${data.tx_hash})`
-      toast.push(label, 'ok')
-      return
-    }
-
-    setModal({ kind: 'attest', mode, status: 'loading' })
-    apiPost<{ mode: 'log' | 'nft' }, AttestResponse>(`/api/releases/${releaseId}/attest`, { mode })
-      .then(data => {
-        setModal({ kind: 'attest', mode, status: 'success', data })
-        const label = mode === 'nft' ? `Minted NFT token ${data.token_id}` : `Attested release (tx ${data.tx_hash})`
-        toast.push(label, 'ok')
-      })
-      .catch(err => {
-        const message = err?.message ? String(err.message) : 'Unable to process request'
-        setModal({ kind: 'attest', mode, status: 'error', error: message })
-        toast.push(message, 'error')
-      })
-  }
-
   const openPrepare = () => {
     if (!releaseId) return
 
@@ -229,6 +176,24 @@ export function Release() {
 
   const closeModal = () => setModal(null)
 
+  const licenseMeta = release?.license_code ? (
+    <div className="release-meta__license">
+      <span className="muted release-meta__license-label">License</span>
+      <span className="license-preview">
+        <LicenseBadge code={release.license_code as LicenseCode} />
+        {release.license_code === 'CUSTOM' ? (
+          release.license_custom_text ? (
+            <span className="license-preview__text">Custom terms provided</span>
+          ) : null
+        ) : release.license_url ? (
+          <a className="release-meta__license-link" href={release.license_url} target="_blank" rel="noreferrer">
+            View terms
+          </a>
+        ) : null}
+      </span>
+    </div>
+  ) : null
+
   const releaseMeta = release ? (
     <div className="card release-meta">
       <div className="release-meta__header">
@@ -236,10 +201,21 @@ export function Release() {
           <div className="heading release-meta__title">Release v{release.version}</div>
           <div className="release-meta__project">Project · {release.project?.name || release.project?.id}</div>
         </div>
-        <a className="release-meta__link" href={release.artifact_url} target="_blank" rel="noreferrer">
-          View artifact
-        </a>
+        <div className="release-meta__actions">
+          <a className="release-meta__link" href={release.artifact_url} target="_blank" rel="noreferrer">
+            View artifact
+          </a>
+          <a
+            className="release-meta__link"
+            href={`/api/releases/${release.id}/evidence.zip`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download evidence
+          </a>
+        </div>
       </div>
+      {licenseMeta}
       <p className={release.notes ? 'release-meta__notes' : 'release-meta__notes muted'}>
         {release.notes || 'No release notes provided.'}
       </p>
@@ -247,20 +223,6 @@ export function Release() {
   ) : null
 
   const actions = [
-    {
-      key: 'attest',
-      title: 'Attest release',
-      description: 'Record a ledger proof of this artifact to seal provenance.',
-      cta: 'Attest release',
-      onClick: () => openAttest('log'),
-    },
-    {
-      key: 'nft',
-      title: 'Mint release NFT',
-      description: 'Issue a collectible NFT referencing this build for downstream traceability.',
-      cta: 'Mint NFT',
-      onClick: () => openAttest('nft'),
-    },
     {
       key: 'filing',
       title: 'Prepare copyright filing',
@@ -270,19 +232,7 @@ export function Release() {
     },
   ]
 
-  const attestOpen = modal?.kind === 'attest'
   const filingOpen = modal?.kind === 'copyright'
-
-  const attestSubtitle =
-    attestOpen && modal.status === 'success'
-      ? modal.mode === 'nft'
-        ? demoMode
-          ? 'NFT minted in Route Forge demo environment.'
-          : 'NFT minted successfully.'
-        : demoMode
-          ? 'Release attestation logged in the demo ledger.'
-          : 'Release attested successfully.'
-      : undefined
 
   const filingSubtitle =
     filingOpen && modal.status === 'success'
@@ -290,9 +240,6 @@ export function Release() {
         ? 'Demo filing package is ready to download.'
         : 'Filing package ready to download.'
       : undefined
-
-  const explorerUrl = (tokenId: number | null | undefined) =>
-    tokenId == null ? '#' : `https://explorer.routeforge.demo/token/${tokenId}`
 
   return (
     <div className="container provenance-container">
@@ -310,6 +257,11 @@ export function Release() {
         </div>
 
         <div className="provenance-actions">
+          <AttestActions
+            releaseId={releaseId}
+            disabled={!release || loadingRelease}
+            onToast={toast.push}
+          />
           {actions.map(action => (
             <div key={action.key} className="provenance-action">
               <div className="provenance-action__text">
@@ -335,58 +287,6 @@ export function Release() {
         )}
         {releaseError && <div className="provenance-hint provenance-hint--error">Error: {releaseError}</div>}
       </div>
-
-      <ProvenanceModal
-        open={Boolean(attestOpen)}
-        title={attestOpen && modal.mode === 'nft' ? 'Mint NFT' : 'Attest release'}
-        status={attestOpen ? modal.status : 'loading'}
-        onClose={closeModal}
-        loadingText="Contacting attestor…"
-        errorText={attestOpen && modal.status === 'error' ? modal.error : undefined}
-        subtitle={attestSubtitle}
-      >
-        {attestOpen && modal.status === 'success' && modal.data && (
-          <div className="provenance-detail-stack">
-            <div className="provenance-detail">
-              <span className="provenance-detail__label">Network</span>
-              <span className="provenance-detail__value">{modal.data.network}</span>
-            </div>
-            <div className="provenance-detail">
-              <span className="provenance-detail__label">Transaction hash</span>
-              <div className="provenance-detail__value provenance-detail__value--split">
-                <code className="provenance-detail__code">{modal.data.tx_hash}</code>
-                <CopyButton text={modal.data.tx_hash} />
-              </div>
-            </div>
-            <div className="provenance-detail">
-              <span className="provenance-detail__label">Release digest (SHA-256)</span>
-              <code className="provenance-detail__code">{modal.data.sha256}</code>
-            </div>
-            {modal.mode === 'nft' && modal.data.token_id != null && (
-              <div className="provenance-detail">
-                <span className="provenance-detail__label">Token ID</span>
-                <div className="provenance-detail__value provenance-detail__value--split">
-                  <span>{modal.data.token_id}</span>
-                  <a
-                    className="provenance-link"
-                    href={explorerUrl(modal.data.token_id)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View on explorer
-                  </a>
-                </div>
-              </div>
-            )}
-            {modal.mode === 'nft' && modal.data.metadata_uri && (
-              <div className="provenance-detail">
-                <span className="provenance-detail__label">Metadata URI</span>
-                <code className="provenance-detail__code">{modal.data.metadata_uri}</code>
-              </div>
-            )}
-          </div>
-        )}
-      </ProvenanceModal>
 
       <ProvenanceModal
         open={Boolean(filingOpen)}

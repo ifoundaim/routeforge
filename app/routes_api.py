@@ -15,6 +15,7 @@ from .utils.validators import slugify, validate_target_url
 from .auth.magic import SessionUser, is_auth_enabled
 from .auth.accounts import ensure_demo_user
 from .guards import require_owner
+from .licenses import get_license_info
 
 
 logger = logging.getLogger("routeforge.api")
@@ -228,12 +229,18 @@ def get_release_detail(release_id: int, request: Request, db: Session = Depends(
         .limit(1)
     ).scalar_one_or_none()
 
+    license_info = get_license_info(release.license_code)
+
     return schemas.ReleaseDetailOut(
         id=release.id,
         project_id=release.project_id,
         version=release.version,
         notes=release.notes,
         artifact_url=release.artifact_url,
+        artifact_sha256=release.artifact_sha256,
+        license_code=release.license_code,
+        license_custom_text=release.license_custom_text,
+        license_url=license_info.url if license_info else None,
         created_at=release.created_at,
         project=release.project,
         latest_route=latest_route,

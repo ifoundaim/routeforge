@@ -18,6 +18,7 @@ from .errors import json_error
 from .middleware import get_request_user
 from .auth.magic import is_auth_enabled
 from .auth.accounts import ensure_demo_user
+from .agent import apply_artifact_hash
 
 logger = logging.getLogger("routeforge.agent")
 
@@ -147,6 +148,10 @@ def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depen
         "notes": notes,
         "artifact_url": artifact_url,
     }
+    release_preview = {
+        **release_dict,
+        "artifact_sha256": None,
+    }
     route_dict: Optional[Dict[str, Any]] = None
 
     if dry_run:
@@ -155,6 +160,7 @@ def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depen
     else:
         # Create release
         release = models.Release(user_id=int(actor["user_id"]) if actor else project.user_id, **release_dict)
+        apply_artifact_hash(release, artifact_url)
         embed = _compute_embedding_if_enabled(notes or artifact_url)
         if embed is not None:
             release.embedding = embed
@@ -199,6 +205,8 @@ def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depen
         }
         release_dict["id"] = release.id
         release_dict["created_at"] = str(release.created_at)
+        release_dict["artifact_sha256"] = release.artifact_sha256
+        release_preview["artifact_sha256"] = release.artifact_sha256
 
         decision = "published"
 
@@ -207,12 +215,7 @@ def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depen
         status_code=200,
         content={
             "decision": decision,
-            "release": release_dict if not dry_run else {
-                "project_id": project_id,
-                "version": version,
-                "notes": notes,
-                "artifact_url": artifact_url,
-            },
+            "release": release_dict if not dry_run else release_preview,
             "route": route_dict,
             "similar_releases": similar,
             "audit_sample": [

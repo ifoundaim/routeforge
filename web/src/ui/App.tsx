@@ -24,7 +24,15 @@ async function http<T>(path: string, opts?: RequestInit): Promise<T> {
 
 // API types based on backend schemas
 type ProjectOut = { id: number; name: string; owner: string; description?: string | null; created_at: string }
-type ReleaseOut = { id: number; project_id: number; version: string; notes?: string | null; artifact_url: string; created_at: string }
+type ReleaseOut = {
+  id: number
+  project_id: number
+  version: string
+  notes?: string | null
+  artifact_url: string
+  artifact_sha256?: string | null
+  created_at: string
+}
 type ReleaseDetailOut = ReleaseOut & { project: ProjectOut; latest_route?: RouteOut | null }
 type RouteOut = { id: number; project_id: number; slug: string; target_url: string; release_id?: number | null; created_at: string }
 type RouteHit = { id: number; ts: string; ip?: string | null; ua?: string | null; ref?: string | null }
