@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlparse
 from typing import Optional, Tuple, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -7,11 +8,16 @@ from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.responses import Response
+import httpx
 
 from .db import get_db
 from . import models, schemas
 from .middleware import get_request_user, json_error_response
 from .utils.validators import slugify, validate_target_url
+from .security.hmac import verify_hmac
+from .redirects.sanity import domain_allowed, get_allowed_schemes, get_blocked_domains, head_ok
+from .worker.queue import queue
+from .agent.publish import apply_artifact_hash
 from .auth.magic import SessionUser, is_auth_enabled
 from .auth.accounts import ensure_demo_user
 from .guards import require_owner
@@ -28,9 +34,8 @@ def error(request: Request, code: str, status_code: int = 400, detail: Optional[
 
 
 def _get_allowed_target_schemes() -> Tuple[str, ...]:
-    raw = os.getenv("ALLOWED_TARGET_SCHEMES", "https,http") or "https,http"
-    cleaned = tuple(dict.fromkeys([item.strip().lower() for item in raw.split(",") if item.strip()]))
-    return cleaned or ("https", "http")
+    # Delegate to redirects.sanity for consistency
+    return get_allowed_schemes()
 
 
 def _require_user(request: Request, db: Session) -> Tuple[SessionUser, Optional[Response]]:
@@ -50,6 +55,48 @@ def _require_user(request: Request, db: Session) -> Tuple[SessionUser, Optional[
     request.state.user = demo_user
     return demo_user, None
 
+
+@router.post("/publish")
+def publish_with_hmac(payload: dict, request: Request, db: Session = Depends(get_db)):
+    body = request.scope.get("body")  # type: ignore[assignment]
+    if isinstance(body, (bytes, bytearray)):
+        body_bytes = bytes(body)
+    else:
+        # If body not captured in scope (common), re-serialize minimal payload
+        import json as _json
+
+        body_bytes = _json.dumps(payload or {}).encode("utf-8")
+
+    user_id, err = verify_hmac(request, body_bytes, db)
+    if err is not None:
+        return error(request, "auth_required" if err == "hmac_required" else "hmac_invalid", status_code=401)
+
+    # Minimal validation
+    try:
+        project_id = int((payload or {}).get("project_id"))
+    except Exception:
+        return error(request, "invalid_project_id", status_code=422)
+    artifact_url = (payload or {}).get("artifact_url")
+    if not artifact_url or not isinstance(artifact_url, str):
+        return error(request, "invalid_artifact_url", status_code=422)
+    notes = (payload or {}).get("notes")
+    if notes is not None and not isinstance(notes, str):
+        notes = str(notes)
+
+    project = db.get(models.Project, project_id)
+    if project is None:
+        return error(request, "project_not_found", status_code=404)
+    if int(project.user_id) != int(user_id):
+        return error(request, "forbidden", status_code=403)
+
+    # Create release and route similar to agent.publish (simplified)
+    release = models.Release(user_id=int(user_id), project_id=project_id, version="auto", notes=notes, artifact_url=artifact_url)
+    db.add(release)
+    db.commit()
+    db.refresh(release)
+
+    # No auto route mint here; return release id
+    return {"id": release.id, "project_id": project_id, "artifact_url": artifact_url, "notes": notes}
 
 
 def _require_user_id(request: Request, session_user: SessionUser) -> Tuple[Optional[int], Optional[Response]]:
@@ -119,6 +166,7 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
     db.add(release)
     db.commit()
     db.refresh(release)
+    _maybe_hash_release_async(release.id, release.artifact_url)
     return release
 
 
@@ -175,6 +223,26 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
         detail = f"Target URL scheme must be one of: {', '.join(allowed_schemes)}"
         return error(request, "invalid_url", status_code=422, detail=detail)
 
+    # Optional domain blocklist
+    host = urlparse(normalized_url).netloc
+    if not domain_allowed(host, blocked=get_blocked_domains()):
+        return error(request, "invalid_url", status_code=422, detail="Target URL domain is not allowed.")
+
+    # Optional HEAD sanity check on creation
+    try:
+        do_head = (os.getenv("HEAD_CHECK_ON_CREATE") or "1").strip() == "1"
+        if do_head:
+            # fire-and-forget; do not block response
+            async def _head_fire_and_forget(url: str):
+                await head_ok(url)
+
+            # Schedule using anyio via FastAPI's loop if present; otherwise ignore
+            import anyio  # type: ignore
+
+            anyio.from_thread.run(_head_fire_and_forget, normalized_url)  # type: ignore
+    except Exception:
+        pass
+
     # Proactive uniqueness check for nicer error; DB constraint remains authoritative
     existing = db.execute(select(models.Route).where(models.Route.slug == sanitized_slug)).scalar_one_or_none()
     if existing is not None:
@@ -194,6 +262,68 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
 
     db.refresh(new_route)
     return new_route
+
+
+# Async heavy task: apply artifact hash when artifacts are large
+_HASH_SIZE_THRESHOLD = int(os.getenv("HASH_ASYNC_SIZE_BYTES", "104857600") or "104857600")  # 100 MB default
+
+
+def _should_hash_async(artifact_url: str) -> bool:
+    # If URL suggests a large artifact by extension, prefer async
+    large_exts = {".zip", ".tar", ".tar.gz", ".tgz", ".7z", ".dmg", ".iso"}
+    lowered = artifact_url.lower()
+    return any(lowered.endswith(ext) for ext in large_exts)
+
+
+def _hash_release_task(args: Tuple[int, str]):
+    release_id, artifact_url = args
+    # Local import to avoid circulars beyond what we already imported
+    from sqlalchemy.orm import Session
+    from .db import try_get_session
+    from . import models
+
+    db = try_get_session()
+    if db is None:
+        return
+    try:
+        release = db.get(models.Release, release_id)
+        if release is None:
+            return
+        # Compute and persist digest
+        apply_artifact_hash(release, artifact_url)
+        db.add(release)
+        db.commit()
+    finally:
+        db.close()  # type: ignore[attr-defined]
+
+
+def _try_head_content_length(url: str, timeout: float = 2.5) -> Optional[int]:
+    try:
+        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
+            resp = client.head(url)
+            if resp.status_code >= 400:
+                return None
+            raw = resp.headers.get("content-length") or resp.headers.get("Content-Length")
+            if not raw:
+                return None
+            try:
+                return int(raw)
+            except Exception:
+                return None
+    except Exception:
+        return None
+
+
+def _maybe_hash_release_async(release_id: int, artifact_url: str) -> None:
+    if not artifact_url:
+        return
+    # Use size threshold first if available via HEAD
+    size = _try_head_content_length(artifact_url)
+    is_large = bool(size and size > _HASH_SIZE_THRESHOLD)
+    if not is_large and not _should_hash_async(artifact_url):
+        return
+    task_id = f"hash:release:{release_id}"
+    queue.submit(task_id, "hash_release", _hash_release_task, (release_id, artifact_url))
 
 
 @router.get("/releases/{release_id}", response_model=schemas.ReleaseDetailOut)

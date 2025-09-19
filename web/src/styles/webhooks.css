@@ -1,0 +1,47 @@
+.webhooks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.webhooks-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .webhooks-grid { grid-template-columns: 1fr; }
+}
+
+.webhooks-form h2,
+.webhooks-list h2 { margin: 0 0 8px; font-size: 16px; }
+
+.webhooks-form__body { display: flex; flex-direction: column; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-row { display: flex; gap: 8px; align-items: center; }
+.field input { width: 100%; }
+.actions { display: flex; justify-content: flex-end; }
+
+.webhooks-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.webhooks-item { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; }
+.webhooks-item__url { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.webhooks-item__url code { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.webhooks-item__meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.webhooks-item__secret { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.webhooks-item__actions { display: flex; align-items: center; gap: 8px; }
+
+.badge { background: rgba(148,163,184,0.12); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.dot { color: var(--muted); }
+.ok { color: #10b981; }
+.error { color: #ef4444; }
+
+.webhooks-last { margin-top: 12px; }
+.webhooks-last h3 { margin: 0 0 8px; font-size: 14px; }
+.webhooks-last__body { display: flex; flex-direction: column; gap: 8px; }
+.webhooks-last__row { display: flex; gap: 12px; align-items: center; }
+.truncate { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.webhooks-error { background: rgba(239,68,68,0.12); color: #fecaca; border: 1px solid rgba(239,68,68,0.35); padding: 8px 10px; border-radius: 8px; margin: 8px 0; }
+
+

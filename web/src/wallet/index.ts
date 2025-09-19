@@ -37,3 +37,5 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     </WagmiProvider>
   )
 }
+
+export { useStarknetConfig, connectStarknetWallet } from './starknet'

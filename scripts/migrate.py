@@ -134,6 +134,73 @@ def main():
         else:
             logger.info("OK: releases.evidence_ipfs_cid already present")
 
+        # api_keys table
+        logger.info("Ensuring api_keys table exists...")
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS api_keys (
+              id BIGINT PRIMARY KEY AUTO_INCREMENT,
+              user_id BIGINT NOT NULL,
+              key_id VARCHAR(64) NOT NULL,
+              secret_hash VARCHAR(128) NOT NULL,
+              active TINYINT NOT NULL DEFAULT 1,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_used_at TIMESTAMP NULL,
+              UNIQUE KEY uq_api_keys_key_id (key_id),
+              INDEX ix_api_keys_user_id (user_id)
+            )
+            """
+        )
+        logger.info("OK: api_keys ready")
+
+        # webhooks table
+        logger.info("Ensuring webhooks table exists...")
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS webhooks (
+              id BIGINT PRIMARY KEY AUTO_INCREMENT,
+              user_id BIGINT NOT NULL,
+              url VARCHAR(2048) NOT NULL,
+              secret VARCHAR(128) NOT NULL,
+              event VARCHAR(64) NOT NULL,
+              active TINYINT NOT NULL DEFAULT 1,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_failed_at TIMESTAMP NULL,
+              INDEX ix_webhooks_user_id (user_id),
+              INDEX ix_webhooks_event (event)
+            )
+            """
+        )
+        logger.info("OK: webhooks ready")
+
+        # token_id column
+        logger.info("Ensuring releases.token_id exists...")
+        token_col_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'token_id'
+            """
+        ).scalar()
+        if not token_col_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN token_id BIGINT NULL")
+            logger.info("OK: releases.token_id added")
+        else:
+            logger.info("OK: releases.token_id already present")
+
+        # metadata_ipfs_cid column
+        logger.info("Ensuring releases.metadata_ipfs_cid exists...")
+        mcol_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'metadata_ipfs_cid'
+            """
+        ).scalar()
+        if not mcol_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN metadata_ipfs_cid VARCHAR(128) NULL")
+            logger.info("OK: releases.metadata_ipfs_cid added")
+        else:
+            logger.info("OK: releases.metadata_ipfs_cid already present")
+
     logger.info("Migration complete.")
 
 

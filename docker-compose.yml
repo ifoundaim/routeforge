@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: routeforge-api
+    environment:
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - TIDB_DSN=${TIDB_DSN}
+      - AUTH_ENABLED=${AUTH_ENABLED:-0}
+      - SESSION_SECRET=${SESSION_SECRET:-dev-secret}
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:8000}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-10}
+      - RATE_LIMIT_WINDOW_SEC=${RATE_LIMIT_WINDOW_SEC:-10}
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: routeforge-web
+    depends_on:
+      - api
+    environment:
+      - VITE_API_BASE=${VITE_API_BASE:-}
+    ports:
+      - "8080:80"
+
+  # Optional: vite preview alternative instead of nginx
+  # web-preview:
+  #   build:
+  #     context: ./web
+  #     dockerfile: Dockerfile
+  #   command: ["npm","run","preview","--","--host","0.0.0.0","--port","4173"]
+  #   ports:
+  #     - "4173:4173"
+
+

@@ -14,6 +14,8 @@ from .. import models
 from ..db import try_get_session
 from ..evidence import persist_evidence_ipfs_cid
 from ..routes_evidence import get_release_evidence_uris
+from ..storage.ipfs import pin_json
+from .metadata import build_nft_metadata
 
 
 logger = logging.getLogger("routeforge.attest.chain")
@@ -130,7 +132,7 @@ class ChainClient:
         release_info: Dict[str, Optional[str]],
     ) -> AttestationResult:
         tx_hash = self._fake_hash("log", release_id)
-        metadata_uri = self._resolve_metadata_uri(release_id, metadata)
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
         return AttestationResult(
             tx_hash=tx_hash,
             metadata_uri=metadata_uri,
@@ -163,7 +165,7 @@ class ChainClient:
                 release_info=release_info,
             )
 
-        metadata_uri = self._resolve_metadata_uri(release_id, metadata)
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
 
         relay_hash: Optional[str] = tx_hash
         if signed_tx:
@@ -171,10 +173,11 @@ class ChainClient:
 
         if relay_hash:
             logger.info("Mint recorded using wallet transaction %s", relay_hash)
+            token_id = self._try_persist_token_id(release_id, relay_hash)
             return AttestationResult(
                 tx_hash=relay_hash,
                 metadata_uri=metadata_uri,
-                token_id=None,
+                token_id=token_id,
                 mode=self._mode,
             )
 
@@ -218,6 +221,60 @@ class ChainClient:
             if evidence_uri:
                 metadata["evidence_uri"] = evidence_uri
             return evidence_uri
+        finally:
+            if session is not None:
+                session.close()
+
+    def _ensure_metadata_uri(
+        self, release_id: int, metadata: Dict[str, str], release_info: Dict[str, Optional[str]]
+    ) -> Optional[str]:
+        """Return ipfs://<cid> for metadata JSON, pinning/caching as needed.
+
+        Falls back to evidence URI if IPFS is not configured.
+        """
+        # Ensure evidence_uri is set and CID persisted if available
+        evidence_uri = self._resolve_metadata_uri(release_id, metadata)
+
+        session = try_get_session()
+        release = None
+        try:
+            if session is not None:
+                release = session.get(models.Release, release_id)
+            # Reuse existing metadata CID if present
+            if release is not None and getattr(release, "metadata_ipfs_cid", None):
+                return f"ipfs://{release.metadata_ipfs_cid}"
+
+            # Build metadata JSON
+            name = None
+            ver = (release_info.get("version") if isinstance(release_info, dict) else None) or None
+            if ver:
+                name = f"RouteForge Release v{ver}"
+            description = None
+            metadata_obj = build_nft_metadata(
+                release_id=release_id,
+                name=name,
+                description=description,
+                evidence_uri=evidence_uri or "",
+                artifact_sha256=metadata.get("artifact_sha256") or None,
+                license_code=metadata.get("license_code") or None,
+            )
+
+            # Pin JSON to IPFS if configured
+            cid = pin_json(metadata_obj, filename=f"release-{release_id}-metadata.json")
+            if not cid:
+                return evidence_uri
+
+            if session is not None and release is not None:
+                release.metadata_ipfs_cid = cid
+                session.add(release)
+                try:
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                else:
+                    logger.info("Persisted metadata CID %s for release %s", cid, release_id)
+
+            return f"ipfs://{cid}"
         finally:
             if session is not None:
                 session.close()
@@ -288,5 +345,202 @@ class ChainClient:
 
         return result
 
+    def _try_persist_token_id(self, release_id: int, tx_hash: str) -> Optional[int]:
+        """Attempt to read tokenId from Transfer event logs and persist it.
 
-__all__ = ["AttestationError", "AttestationResult", "ChainClient"]
+        Returns the token_id if extracted; otherwise None.
+        """
+        # ERC-721 Transfer(address,address,uint256) topic0
+        TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a7ca3b3b7a"
+
+        # Fetch receipt
+        request = {
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionReceipt",
+            "params": [tx_hash],
+            "id": secrets.randbelow(1_000_000),
+        }
+        receipt: Optional[Dict[str, Any]] = None
+        try:
+            response = httpx.post(self._rpc_url, json=request, timeout=15.0)
+            response.raise_for_status()
+            data = response.json()
+            receipt = data.get("result") if isinstance(data, dict) else None
+        except httpx.HTTPError:
+            return None
+
+        if not isinstance(receipt, dict):
+            return None
+
+        logs = receipt.get("logs")
+        if not isinstance(logs, list):
+            return None
+
+        contract_addr = (self._contract_address or "").lower()
+        token_id: Optional[int] = None
+        for log in logs:
+            if not isinstance(log, dict):
+                continue
+            if str(log.get("address", "")).lower() != contract_addr:
+                continue
+            topics = log.get("topics") or []
+            if not (isinstance(topics, list) and len(topics) >= 4):
+                continue
+            topic0 = str(topics[0]).lower()
+            if topic0 != TRANSFER_TOPIC0:
+                continue
+            try:
+                token_hex = str(topics[3])
+                token_id = int(token_hex, 16)
+                break
+            except Exception:
+                continue
+
+        if token_id is None:
+            return None
+
+        session = try_get_session()
+        if session is None:
+            return token_id
+        try:
+            release = session.get(models.Release, release_id)
+            if release is None:
+                return token_id
+            if getattr(release, "token_id", None) is None:
+                release.token_id = int(token_id)
+                session.add(release)
+                try:
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                else:
+                    logger.info("Persisted token_id=%s for release %s", token_id, release_id)
+        finally:
+            session.close()
+
+        return token_id
+
+
+class StarknetClient:
+    """Minimal Starknet client used for wallet-submitted mints with demo fallback.
+
+    Notes:
+    - We do not relay transactions server-side; only accept a wallet-provided tx_hash.
+    - If STARKNET_CONTRACT is not configured, we always fall back to demo log path.
+    - Metadata URI handling mirrors the EVM client to ensure parity.
+    """
+
+    def __init__(self) -> None:
+        self._rpc_url = (os.getenv("STARKNET_RPC_URL") or "").strip()
+        self._contract_address = (os.getenv("STARKNET_CONTRACT") or "").strip()
+        explorer_override = (os.getenv("STARKNET_EXPLORER") or "").strip()
+        # Default explorer: Starkscan Sepolia
+        self._explorer_tx_base = explorer_override or "https://sepolia.starkscan.co/tx"
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+    def describe_config(self) -> Dict[str, Any]:
+        has_contract = bool(self._contract_address)
+        mode = "starknet" if has_contract else "demo"
+        return {
+            "rpc_url": self._rpc_url or None,
+            "contract": self._contract_address or None,
+            "requires_wallet": True,
+            "mode": mode,
+            "explorer_tx_base": self._explorer_tx_base,
+            "wallet_enabled": has_contract,
+        }
+
+    # ------------------------------------------------------------------
+    # Flows
+    # ------------------------------------------------------------------
+    def send_log(
+        self,
+        *,
+        release_id: int,
+        metadata: Dict[str, str],
+        release_info: Dict[str, Optional[str]],
+    ) -> AttestationResult:
+        tx_hash = f"starknet-log-{release_id}-{secrets.token_hex(8)}"
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
+        return AttestationResult(
+            tx_hash=tx_hash,
+            metadata_uri=metadata_uri,
+            token_id=None,
+            mode="demo",
+        )
+
+    def mint_wallet(
+        self,
+        *,
+        release_id: int,
+        metadata: Dict[str, str],
+        release_info: Dict[str, Optional[str]],
+        tx_hash: Optional[str] = None,
+    ) -> AttestationResult:
+        # Not configured → always demo path
+        if not self._contract_address:
+            logger.info("Starknet not configured; using demo log path")
+            return self.send_log(
+                release_id=release_id,
+                metadata=metadata,
+                release_info=release_info,
+            )
+
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
+
+        if not tx_hash:
+            # Wallet signature required for Starknet path
+            raise AttestationError("wallet_tx_hash_required")
+
+        # We do not introspect receipts for token_id on Starknet here.
+        return AttestationResult(
+            tx_hash=tx_hash,
+            metadata_uri=metadata_uri,
+            token_id=None,
+            mode="starknet",
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers (reuse EVM helpers for metadata)
+    # ------------------------------------------------------------------
+    def _ensure_metadata_uri(
+        self, release_id: int, metadata: Dict[str, str], release_info: Dict[str, Optional[str]]
+    ) -> Optional[str]:
+        # Delegate to shared logic in EVM client for parity
+        # (copy the minimal code to avoid coupling)
+        session = try_get_session()
+        release = None
+        persisted_cid: Optional[str] = None
+        try:
+            if session is not None:
+                release = session.get(models.Release, release_id)
+
+            uris = get_release_evidence_uris(release_id, release)
+            stored_ipfs = uris.get("ipfs")
+            if stored_ipfs and release is not None:
+                logger.info("Reusing stored evidence CID for release %s", release_id)
+                metadata["evidence_uri"] = stored_ipfs
+                return stored_ipfs
+
+            evidence_uri = metadata.get("evidence_uri")
+            if not evidence_uri:
+                evidence_uri = uris.get("http")
+
+            if session is not None and release is not None:
+                persisted_cid = persist_evidence_ipfs_cid(session, release, evidence_uri)
+            if persisted_cid:
+                ipfs_uri = f"ipfs://{persisted_cid}"
+                metadata["evidence_uri"] = ipfs_uri
+                return ipfs_uri
+
+            if evidence_uri:
+                metadata["evidence_uri"] = evidence_uri
+            return evidence_uri
+        finally:
+            if session is not None:
+                session.close()
+
+
+__all__ = ["AttestationError", "AttestationResult", "ChainClient", "StarknetClient"]

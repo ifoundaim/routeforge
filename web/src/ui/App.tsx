@@ -7,6 +7,7 @@ import { Header } from '../components/Header'
 import { AppLayout } from '../pages/AppLayout'
 import { Dashboard } from '../pages/Dashboard'
 import { RouteDetail as RouteDetailPage } from '../pages/RouteDetail'
+import { SettingsWebhooks } from '../pages/SettingsWebhooks'
 
 type Json = Record<string, unknown>
 
@@ -84,6 +85,7 @@ export function App() {
       <AppLayout>
         <Routes>
           <Route path="/app/dashboard" element={<Dashboard />} />
+          <Route path="/app/settings/webhooks" element={<SettingsWebhooks />} />
           <Route path="/app/routes/:slug" element={<RouteDetailPage />} />
           <Route path="/app/routes/id/:id" element={<RouteDetailPage />} />
           <Route path="/app/setup" element={<LegacyDemoApp />} />

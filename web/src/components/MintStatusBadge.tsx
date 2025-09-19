@@ -12,6 +12,7 @@ type AttestConfigStatus = {
   abi_fn: string
   contract?: string | null
   base_rpc_url_set: boolean
+  chain_name?: string | null
 }
 
 type EvidenceStatus = {
@@ -98,27 +99,40 @@ export function MintStatusBadge(): JSX.Element {
   const mintParts = useMemo(() => {
     if (!config) return [] as string[]
     const parts: string[] = []
-    const label = toTitle(config.mode)
-    if (label) parts.push(label)
-    if (config.wallet_enabled) parts.push('Wallet')
-    if (config.custodial_enabled) parts.push('Custodial')
-    if (!parts.length && config.mode) parts.push('Unknown')
+    const networkTitle = toTitle(config.mode)
+    if (networkTitle) parts.push(networkTitle)
+
+    let walletMode = 'Log only'
+    if (config.mode === 'demo') {
+      walletMode = 'Log only'
+    } else if (config.wallet_enabled) {
+      walletMode = 'Wallet'
+    } else if (config.custodial_enabled) {
+      walletMode = 'Custodial'
+    }
+    parts.push(walletMode)
+
+    const ipfsOk = evidence?.ipfs_enabled === true
+    parts.push(`IPFS ${ipfsOk ? '✓' : '✗'}`)
+
     return parts
-  }, [config])
+  }, [config, evidence])
 
   const tone = useMemo<'ok' | 'warn' | 'off'>(() => {
     if (configError) return 'off'
     if (!config) return 'warn'
-    if (config.mode === 'testnet' && config.wallet_enabled) return 'ok'
+    const ipfsOk = evidence?.ipfs_enabled === true
+    const canMint = config.wallet_enabled || config.custodial_enabled
+    if (config.mode === 'testnet' && canMint && ipfsOk) return 'ok'
     if (config.mode === 'off') return 'off'
     return 'warn'
-  }, [config, configError])
+  }, [config, configError, evidence])
 
   const label = useMemo(() => {
     if (configError) return 'Mint: Error'
     if (loading) return 'Mint: Loading…'
     if (!config) return 'Mint: Unknown'
-    return `Mint: ${mintParts.join(' / ') || 'Unknown'}`
+    return `Mint: ${mintParts.join(' · ') || 'Unknown'}`
   }, [config, configError, loading, mintParts])
 
   const contractView = useMemo(() => shortenContract(config?.contract), [config?.contract])
@@ -135,12 +149,13 @@ export function MintStatusBadge(): JSX.Element {
     >
       <button
         type="button"
-        className={`status-pill status-pill--${tone}`}
+        className={`status-pill status-pill--${tone}${loading ? ' status-pill--skeleton' : ''}`}
         onFocus={showTooltip}
         onBlur={hideTooltip}
         aria-haspopup="true"
         aria-expanded={open}
         aria-label="Mint and storage status summary"
+        aria-busy={loading}
       >
         <span className="status-pill__dot" aria-hidden="true" />
         <span>{label}</span>
@@ -154,6 +169,10 @@ export function MintStatusBadge(): JSX.Element {
               <p className="status-badge__tooltip-note">Loading status…</p>
             ) : (
               <>
+                <div className="status-badge__tooltip-row">
+                  <span className="status-badge__tooltip-label">Network</span>
+                  <span className="status-badge__tooltip-value">{config?.chain_name || toTitle(config?.mode) || '—'}</span>
+                </div>
                 <div className="status-badge__tooltip-row">
                   <span className="status-badge__tooltip-label">Contract</span>
                   <span
@@ -179,6 +198,15 @@ export function MintStatusBadge(): JSX.Element {
             )}
             {evidenceError && !configError ? (
               <p className="status-badge__tooltip-note status-badge__tooltip-note--warn">{evidenceError}</p>
+            ) : null}
+            {!loading && config ? (
+              <p className="status-badge__tooltip-note">
+                {config.mode === 'demo'
+                  ? 'Demo mode: returns mock results; log-only fallback is used.'
+                  : !config.wallet_enabled && !config.custodial_enabled
+                    ? 'Wallet disabled: on-chain log fallback will be recorded.'
+                    : 'Minting available on this network.'}
+              </p>
             ) : null}
           </>
         )}

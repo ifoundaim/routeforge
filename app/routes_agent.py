@@ -19,6 +19,7 @@ from .middleware import get_request_user
 from .auth.magic import is_auth_enabled
 from .auth.accounts import ensure_demo_user
 from .agent import apply_artifact_hash
+from .hooks.dispatcher import enqueue_event
 
 logger = logging.getLogger("routeforge.agent")
 
@@ -168,6 +169,10 @@ def agent_publish(payload: Dict[str, Any], request: Request, db: Session = Depen
         db.commit()
         db.refresh(release)
         _log_audit(db, "release", release.id, "publish", {"project_id": project_id, "version": version})
+        try:
+            enqueue_event(int(release.user_id), "release_published", {"release_id": int(release.id), "project_id": int(project_id)})
+        except Exception:
+            pass
 
         # Mint route
         base_slug = slugify(f"{project.name}-{version}")

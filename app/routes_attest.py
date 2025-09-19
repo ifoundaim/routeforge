@@ -10,6 +10,7 @@ from .attest.chain import (
     AttestationError,
     AttestationResult,
     ChainClient,
+    StarknetClient,
 )
 from .auth.magic import is_auth_enabled
 from .demo_flags import is_demo
@@ -53,6 +54,15 @@ class AttestConfigResponse(BaseModel):
     custodial_enabled: bool
     abi_fn: str
     base_rpc_url_set: bool
+
+
+class StarknetConfigResponse(BaseModel):
+    rpc_url: Optional[str] = None
+    contract: Optional[str] = None
+    requires_wallet: bool
+    mode: Literal["starknet", "demo"]
+    explorer_tx_base: Optional[str] = None
+    wallet_enabled: bool
 
 
 def _build_metadata_fields(
@@ -118,6 +128,16 @@ def read_attest_config(request: Request) -> AttestConfigResponse:
     return AttestConfigResponse(**config)
 
 
+@router.get("/attest/starknet/config", response_model=StarknetConfigResponse)
+def read_starknet_config(request: Request) -> StarknetConfigResponse:
+    if is_auth_enabled() and get_request_user(request) is None:
+        raise HTTPException(status_code=401, detail="auth_required")
+
+    client = StarknetClient()
+    config = client.describe_config()
+    return StarknetConfigResponse(**config)
+
+
 @router.post("/releases/{release_id}/attest", response_model=AttestResponse)
 def attest_release(release_id: int, payload: AttestRequest, request: Request) -> AttestResponse:
     if is_auth_enabled() and get_request_user(request) is None:
@@ -149,4 +169,48 @@ def attest_release(release_id: int, payload: AttestRequest, request: Request) ->
         metadata_uri=result.metadata_uri,
         token_id=result.token_id,
         mode=result.mode,
+    )
+
+
+class StarknetAttestRequest(BaseModel):
+    tx_hash: Optional[str] = Field(default=None, description="Existing Starknet transaction hash from a wallet submission")
+
+
+class StarknetAttestResponse(BaseModel):
+    tx_hash: str
+    metadata_uri: Optional[str] = None
+    token_id: Optional[int] = None
+    mode: Literal["starknet", "demo"]
+
+
+@router.post("/releases/{release_id}/attest/starknet", response_model=StarknetAttestResponse)
+def attest_release_starknet(release_id: int, payload: StarknetAttestRequest, request: Request) -> StarknetAttestResponse:
+    if is_auth_enabled() and get_request_user(request) is None:
+        raise HTTPException(status_code=401, detail="auth_required")
+
+    release_info, metadata = _load_release(release_id)
+
+    client = StarknetClient()
+    try:
+        if payload.tx_hash:
+            result: AttestationResult = client.mint_wallet(
+                release_id=release_id,
+                metadata=metadata,
+                release_info=release_info,
+                tx_hash=payload.tx_hash,
+            )
+        else:
+            result = client.send_log(
+                release_id=release_id,
+                metadata=metadata,
+                release_info=release_info,
+            )
+    except AttestationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    return StarknetAttestResponse(
+        tx_hash=result.tx_hash,
+        metadata_uri=result.metadata_uri,
+        token_id=result.token_id,
+        mode=result.mode if result.mode in {"starknet", "demo"} else "demo",
     )

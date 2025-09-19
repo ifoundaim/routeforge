@@ -20,7 +20,11 @@ from .routes_ip import router as ip_router
 from .routes_public import router as public_router
 from .routes_uploads import router as uploads_router
 from .routes_auth import router as auth_router
+from .routes_api_keys import router as api_keys_router
+from .routes_webhooks import router as webhooks_router
 from .middleware import RequestContextMiddleware
+# Disable rate limit middleware by default in container
+RateLimitMiddleware = None  # type: ignore
 from .errors import install_exception_handlers
 
 
@@ -31,11 +35,18 @@ logger = logging.getLogger("routeforge")
 
 app = FastAPI(title="RouteForge API", version="1.0.0")
 
-# CORS: allow all for demo
+# CORS: configure allowed web origins via env (fallback to localhost ports)
+raw_origins = os.getenv(
+    "CORS_ALLOW_ORIGINS",
+    os.getenv("WEB_ORIGIN", "http://localhost:8080,http://localhost:4173") or "",
+)
+origins = [o.strip() for o in raw_origins.split(",") if o.strip()] or ["*"]
+allow_credentials = True if origins and origins != ["*"] else False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -59,6 +70,8 @@ app.include_router(billing_router)
 app.include_router(ip_router)
 app.include_router(public_router)
 app.include_router(uploads_router)
+app.include_router(api_keys_router)
+app.include_router(webhooks_router)
 
 if is_auth_enabled():
     ensure_magic(app)
