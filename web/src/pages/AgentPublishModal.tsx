@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { LicenseBadge, LicenseStep, type LicenseCode } from '../components/LicenseStep'
+import { UploadField } from '../components/UploadField'
 import { SimilarRelease, SimilarReleases } from '../components/SimilarReleases'
 import { ToastShelf, useToastQueue } from '../components/Toast'
 import { apiPatch } from '../lib/api'
@@ -84,6 +85,8 @@ export function AgentPublishModal({
   const [active, setActive] = useState<ActiveAction>(null)
   const [licenseCode, setLicenseCode] = useState<LicenseCode>('MIT')
   const [customLicenseText, setCustomLicenseText] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadFieldKey, setUploadFieldKey] = useState(0)
 
   const formRef = useRef<HTMLFormElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -113,6 +116,8 @@ export function AgentPublishModal({
     setResult(null)
     setLicenseCode('MIT')
     setCustomLicenseText('')
+    setIsUploading(false)
+    setUploadFieldKey(prev => prev + 1)
   }, [open, initialArtifactUrl, initialNotes])
 
   useEffect(() => {
@@ -183,10 +188,26 @@ export function AgentPublishModal({
   }, [open, onClose])
 
   const isFormValid = useMemo(() => {
-    return artifactUrl.trim().length > 0
-  }, [artifactUrl])
+    return artifactUrl.trim().length > 0 && !isUploading
+  }, [artifactUrl, isUploading])
 
   const resetActive = () => setActive(null)
+
+  const handleUploadComplete = useCallback(
+    (publicUrl: string) => {
+      setArtifactUrl(publicUrl)
+      setResult(null)
+      pushToast('Artifact uploaded', 'ok')
+    },
+    [pushToast],
+  )
+
+  const handleUploadError = useCallback(
+    (message: string) => {
+      pushToast(message, 'error')
+    },
+    [pushToast],
+  )
 
   const persistLicenseSelection = async (releaseId: number) => {
     const payload: { license_code: LicenseCode; custom_text?: string } = {
@@ -244,6 +265,7 @@ export function AgentPublishModal({
   }
 
   const handlePreview = async () => {
+    if (isUploading) return
     if (!formRef.current) return
     if (!(formRef.current.reportValidity?.() ?? true)) return
 
@@ -266,6 +288,7 @@ export function AgentPublishModal({
   }
 
   const handlePublish = async () => {
+    if (isUploading) return
     if (!result) {
       await handlePreview()
       return
@@ -372,6 +395,12 @@ export function AgentPublishModal({
                   autoComplete="off"
                 />
               </div>
+              <UploadField
+                key={uploadFieldKey}
+                onUploaded={handleUploadComplete}
+                onError={handleUploadError}
+                onUploadStateChange={value => setIsUploading(value)}
+              />
               <div className="agent-field">
                 <label htmlFor="agent-notes">Notes for audit trail</label>
                 <textarea
@@ -409,7 +438,7 @@ export function AgentPublishModal({
                 </button>
                 <button
                   type="button"
-                  disabled={!result || isPublishing}
+                  disabled={!result || isPublishing || isUploading}
                   onClick={handlePublish}
                 >
                   {isPublishing ? 'Publishing...' : 'Publish'}

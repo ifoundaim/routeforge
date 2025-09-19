@@ -8,3 +8,5 @@
 - [ ] Skip-links are present and functional
 - [ ] Open Graph tags populate with accurate content
 - [ ] Public release route is reachable without auth
+- [ ] Skip link jumps directly to #main on Present Mode and public release views
+- [ ] `npm run lh:present` logs scores (a11y ≥ 90) for Present Mode and Public Release

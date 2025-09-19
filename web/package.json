@@ -7,18 +7,26 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lh:present": "node scripts/lh.mjs"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.1",
+    "@tanstack/react-query": "^5.51.21",
+    "@vercel/og": "^0.6.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "^6.30.1"
+    "react-router-dom": "^6.30.1",
+    "viem": "^2.12.4",
+    "wagmi": "^2.12.9"
   },
   "devDependencies": {
     "@playwright/test": "1.47.2",
     "@types/react": "18.3.5",
     "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "4.3.2",
+    "chrome-launcher": "^1.2.0",
+    "lighthouse": "^12.8.2",
     "typescript": "5.6.2",
     "vite": "5.4.2"
   }

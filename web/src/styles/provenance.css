@@ -9,6 +9,14 @@
 .release-meta__link:hover { text-decoration: underline; }
 .release-meta__notes { margin: 12px 0 0; line-height: 1.55; }
 
+.release-section { display: flex; flex-direction: column; gap: 18px; }
+.release-section__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.release-section__title { margin: 0; }
+.release-section__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.release-section__content { display: flex; flex-direction: column; gap: 14px; }
+.release-section__note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
+.release-section__license-text { margin: 0; padding: 12px; border-radius: 10px; background: rgba(15, 23, 42, 0.55); border: 1px solid rgba(148, 163, 184, 0.25); font-size: 12px; white-space: pre-wrap; line-height: 1.5; color: var(--muted); }
+
 .provenance-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .provenance-heading { margin-bottom: 4px; }
 .provenance-subheading { margin: 4px 0 0; max-width: 520px; line-height: 1.55; }
@@ -19,6 +27,8 @@
 .provenance-action__title { font-size: 16px; font-weight: 600; margin: 0; }
 .provenance-action__desc { margin: 6px 0 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
 .provenance-action button { min-width: 160px; }
+.provenance-wallet { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.provenance-wallet__network { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 
 .provenance-hint { margin-top: 16px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .provenance-hint--error { color: var(--error); }

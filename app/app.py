@@ -17,6 +17,8 @@ from .routes_evidence import router as evidence_router
 from .routes_releases import router as releases_router
 from .routes_health import router as health_router
 from .routes_ip import router as ip_router
+from .routes_public import router as public_router
+from .routes_uploads import router as uploads_router
 from .routes_auth import router as auth_router
 from .middleware import RequestContextMiddleware
 from .errors import install_exception_handlers
@@ -55,6 +57,8 @@ app.include_router(evidence_router)
 app.include_router(releases_router)
 app.include_router(billing_router)
 app.include_router(ip_router)
+app.include_router(public_router)
+app.include_router(uploads_router)
 
 if is_auth_enabled():
     ensure_magic(app)

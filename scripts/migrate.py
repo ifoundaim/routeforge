@@ -121,6 +121,19 @@ def main():
         else:
             logger.info("OK: releases.artifact_sha256 already present")
 
+        logger.info("Ensuring releases.evidence_ipfs_cid exists...")
+        cid_col_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'evidence_ipfs_cid'
+            """
+        ).scalar()
+        if not cid_col_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN evidence_ipfs_cid VARCHAR(128) NULL")
+            logger.info("OK: releases.evidence_ipfs_cid added")
+        else:
+            logger.info("OK: releases.evidence_ipfs_cid already present")
+
     logger.info("Migration complete.")
 
 

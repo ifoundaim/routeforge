@@ -93,6 +93,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('storage', handle)
   }, [forced])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const shell = document.querySelector('.app-shell')
+    if (!shell) return
+
+    const ensureMainTarget = () => {
+      const target = shell.querySelector('#main') as HTMLElement | null
+      if (target) {
+        if (!target.hasAttribute('tabindex')) {
+          target.setAttribute('tabindex', '-1')
+        }
+        return
+      }
+      const fallback = shell.querySelector('main') as HTMLElement | null
+      if (fallback) {
+        fallback.setAttribute('id', 'main')
+        if (!fallback.hasAttribute('tabindex')) {
+          fallback.setAttribute('tabindex', '-1')
+        }
+      }
+    }
+
+    ensureMainTarget()
+    const observer = new MutationObserver(() => ensureMainTarget())
+    observer.observe(shell, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [])
+
   const contextValue = useMemo<PresentModeContextValue>(() => ({
     present,
     forced,
@@ -109,6 +137,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <PresentModeContext.Provider value={contextValue}>
       <div className="app-shell">
+        <a className="skip-link" href="#main">Skip to content</a>
         {children}
       </div>
     </PresentModeContext.Provider>

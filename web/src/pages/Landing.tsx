@@ -3,40 +3,23 @@ import React, { useEffect } from 'react'
 import { CTAButton } from '../components/CTAButton'
 import { FlowDiagram } from '../components/FlowDiagram'
 import { Header } from '../components/Header'
+import { useShareMeta } from '../lib/shareMeta'
 import '../styles/landing.css'
 
 export function Landing() {
-  useEffect(() => {
-    const previousTitle = document.title
-    document.title = 'RouteForge – Ship releases, mint links, prove authorship.'
+  useShareMeta({
+    title: 'RouteForge – Ship releases, mint links, prove authorship.',
+    description:
+      'RouteForge ships releases by agent: one request mints links, proves authorship, and routes traffic with TiDB-backed evidence.',
+  })
 
-    const description =
-      'RouteForge ships releases by agent: one request mints links, proves authorship, and routes traffic with TiDB-backed evidence.'
-    const meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null
-    const previousDescription = meta?.getAttribute('content') || null
-    let createdMeta: HTMLMetaElement | null = null
-    if (meta) {
-      meta.setAttribute('content', description)
-    } else {
-      createdMeta = document.createElement('meta')
-      createdMeta.name = 'description'
-      createdMeta.content = description
-      document.head.appendChild(createdMeta)
-    }
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
 
     document.body.classList.add('landing-page')
 
     return () => {
       document.body.classList.remove('landing-page')
-      document.title = previousTitle
-      if (meta && previousDescription !== null) {
-        meta.setAttribute('content', previousDescription)
-      } else if (meta && previousDescription === null) {
-        meta.removeAttribute('content')
-      }
-      if (createdMeta) {
-        document.head.removeChild(createdMeta)
-      }
     }
   }, [])
 
@@ -44,7 +27,7 @@ export function Landing() {
     <div className="landing">
       <Header />
 
-      <main className="landing-main" id="main-content">
+      <main className="landing-main" id="main" tabIndex={-1}>
         <section className="landing-hero" aria-labelledby="landing-title">
           <div className="landing-hero-content">
             <p className="landing-eyebrow">Agent-native release routing</p>

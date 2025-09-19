@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -23,17 +23,36 @@ router = APIRouter(prefix="/api", tags=["attest"])
 
 class AttestRequest(BaseModel):
     mode: Literal["log", "nft"] = Field(description="Attestation mode")
+    tx_hash: Optional[str] = Field(default=None, description="Existing transaction hash from a wallet submission")
+    signed_tx: Optional[str] = Field(default=None, description="Signed raw transaction to relay via RPC")
 
 
 class AttestResponse(BaseModel):
     tx_hash: str
     metadata_uri: Optional[str] = None
     token_id: Optional[int] = None
-    mode: Literal["demo", "testnet"]
+    mode: Literal["demo", "testnet", "off"]
 
 
 class DemoModeResponse(BaseModel):
     demo: bool
+
+
+class AttestConfigResponse(BaseModel):
+    chain_id: int
+    chain_name: str
+    rpc_url: Optional[str] = None
+    contract: Optional[str] = None
+    mint_function: str
+    mint_inputs: List[str] = Field(default_factory=list)
+    abi: Optional[List[Dict[str, Any]]] = None
+    requires_wallet: bool
+    mode: Literal["demo", "testnet", "off"]
+    explorer_tx_base: Optional[str] = None
+    wallet_enabled: bool
+    custodial_enabled: bool
+    abi_fn: str
+    base_rpc_url_set: bool
 
 
 def _build_metadata_fields(
@@ -89,6 +108,16 @@ def read_demo_mode() -> DemoModeResponse:
     return DemoModeResponse(demo=is_demo())
 
 
+@router.get("/attest/config", response_model=AttestConfigResponse)
+def read_attest_config(request: Request) -> AttestConfigResponse:
+    if is_auth_enabled() and get_request_user(request) is None:
+        raise HTTPException(status_code=401, detail="auth_required")
+
+    client = ChainClient()
+    config = client.describe_config()
+    return AttestConfigResponse(**config)
+
+
 @router.post("/releases/{release_id}/attest", response_model=AttestResponse)
 def attest_release(release_id: int, payload: AttestRequest, request: Request) -> AttestResponse:
     if is_auth_enabled() and get_request_user(request) is None:
@@ -109,6 +138,8 @@ def attest_release(release_id: int, payload: AttestRequest, request: Request) ->
                 release_id=release_id,
                 metadata=metadata,
                 release_info=release_info,
+                tx_hash=payload.tx_hash,
+                signed_tx=payload.signed_tx,
             )
     except AttestationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

@@ -87,17 +87,24 @@ def get_stats_summary(request: Request, days: int = 7, db: Session = Depends(get
         select(
             models.RouteHit.route_id.label("route_id"),
             models.Route.slug.label("slug"),
+            models.Route.release_id.label("release_id"),
             func.count(models.RouteHit.id).label("clicks"),
         )
         .join(models.Route, models.Route.id == models.RouteHit.route_id)
         .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
-        .group_by(models.RouteHit.route_id, models.Route.slug)
+        .group_by(models.RouteHit.route_id, models.Route.slug, models.Route.release_id)
         .order_by(desc("clicks"))
         .limit(10)
     ).all()
 
     top_routes: List[Dict[str, Any]] = [
-        {"route_id": int(r.route_id), "slug": r.slug, "clicks": int(r.clicks)} for r in top_rows
+        {
+            "route_id": int(r.route_id),
+            "slug": r.slug,
+            "clicks": int(r.clicks),
+            "release_id": int(r.release_id) if getattr(r, "release_id", None) is not None else None,
+        }
+        for r in top_rows
     ]
 
     return {
