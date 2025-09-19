@@ -10,6 +10,7 @@ type TopRoute = {
   route_id: number
   slug: string
   clicks: number
+  release_id?: number | null
 }
 
 type StatsSummary = {
@@ -167,40 +168,64 @@ export function Dashboard() {
           const stats = routeStats[route.route_id]
           const sparkData = stats?.data ? buildSparklineSeries(stats.data.by_day, 7) : []
           const link = route.slug ? `/app/routes/${route.slug}` : `/app/routes/id/${route.route_id}`
+          const shareHref = route.release_id ? `/rel/${route.release_id}` : null
 
           return (
-            <Link
+            <div
               key={route.route_id}
               className="card"
-              to={link}
-              style={{
-                display: 'flex',
-                gap: 16,
-                alignItems: 'center',
-                padding: 16,
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {route.slug}
-                </div>
-                <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 6 }}>
-                  {formatNumber(route.clicks)} clicks · 7d
-                  {stats?.error ? (
-                    <span style={{ color: 'var(--error)', marginLeft: 8 }}>Sparkline unavailable</span>
-                  ) : null}
-                </div>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                <Link
+                  to={link}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    display: 'block',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {route.slug}
+                  </div>
+                  <div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 6 }}>
+                    {formatNumber(route.clicks)} clicks · 7d
+                    {stats?.error ? (
+                      <span style={{ color: 'var(--error)', marginLeft: 8 }}>Sparkline unavailable</span>
+                    ) : null}
+                  </div>
+                </Link>
+                <Sparkline
+                  data={sparkData}
+                  loading={Boolean(stats?.loading)}
+                  width={140}
+                  height={36}
+                  ariaLabel={`7-day trend for ${route.slug}`}
+                />
               </div>
-              <Sparkline
-                data={sparkData}
-                loading={Boolean(stats?.loading)}
-                width={140}
-                height={36}
-                ariaLabel={`7-day trend for ${route.slug}`}
-              />
-            </Link>
+              {shareHref ? (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <a
+                    href={shareHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 13,
+                      color: 'var(--accent)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Share release
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              ) : null}
+            </div>
           )
         })}
       </div>
@@ -216,7 +241,7 @@ export function Dashboard() {
   return (
     <div className="container">
       <Header />
-      <main style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 24 }}>
+      <main style={{ display: 'flex', flexDirection: 'column', gap: 'var(--layout-gap)' }}>
         <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="heading" style={{ marginBottom: 0 }}>7 day traction</div>
           {!isAuthenticated ? (

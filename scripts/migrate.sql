@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS releases (
   license_custom_text TEXT,
   artifact_url TEXT NOT NULL,
   artifact_sha256 VARCHAR(128) NULL,
+  evidence_ipfs_cid VARCHAR(128) NULL,
   -- embedding column: use LONGBLOB for broad MySQL compatibility (VECTOR in TiDB handled by Python migrator)
   embedding LONGBLOB NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -85,6 +86,7 @@ ALTER TABLE projects MODIFY COLUMN user_id BIGINT NOT NULL;
 ALTER TABLE releases MODIFY COLUMN user_id BIGINT NOT NULL;
 ALTER TABLE routes MODIFY COLUMN user_id BIGINT NOT NULL;
 ALTER TABLE releases ADD COLUMN IF NOT EXISTS artifact_sha256 VARCHAR(128) NULL;
+ALTER TABLE releases ADD COLUMN IF NOT EXISTS evidence_ipfs_cid VARCHAR(128) NULL;
 ALTER TABLE releases ADD COLUMN IF NOT EXISTS license_code VARCHAR(64) NULL;
 ALTER TABLE releases ADD COLUMN IF NOT EXISTS license_custom_text TEXT NULL;
 

@@ -1,4 +1,4 @@
-.PHONY: run migrate seed fmt lint demo-seed demo-validate demo-run
+.PHONY: run migrate seed fmt lint demo-seed demo-validate demo-run og-preview
 
 run:
 	uvicorn app.app:app --reload --port $${PORT:-8000}
@@ -47,3 +47,10 @@ web-dev:
 
 smoke-ui:
 	bash scripts/smoke_ui.sh
+
+og-preview:
+	@if [ -z "$(REL)" ]; then \
+		echo "REL is required (usage: make og-preview REL=1)" >&2; \
+		exit 1; \
+	fi
+	API="$$API" PORT="$$PORT" bash scripts/og_preview.sh "$(REL)"

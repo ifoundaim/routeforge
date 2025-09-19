@@ -297,7 +297,42 @@ def _render_hits_csv(rows: List) -> str:
     return buffer.getvalue()
 
 
+def extract_ipfs_cid(evidence_uri: Optional[str]) -> Optional[str]:
+    """Return the CID portion of an ipfs:// URI, or None if not applicable."""
+    if not evidence_uri:
+        return None
+    evidence_uri = evidence_uri.strip()
+    if not evidence_uri.lower().startswith("ipfs://"):
+        return None
+    cid = evidence_uri[7:].strip()
+    return cid or None
+
+
+def persist_evidence_ipfs_cid(db: Session, release: models.Release, evidence_uri: Optional[str]) -> Optional[str]:
+    """Persist the CID extracted from an evidence URI if the release has none."""
+    cid = extract_ipfs_cid(evidence_uri)
+    if cid is None:
+        return None
+
+    if getattr(release, "evidence_ipfs_cid", None):
+        return release.evidence_ipfs_cid
+
+    release.evidence_ipfs_cid = cid
+    db.add(release)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    else:
+        db.refresh(release)
+        logger.info("Persisted evidence CID %s for release %s", cid, release.id)
+    return cid
+
+
 __all__ = [
     "compute_artifact_sha256",
     "build_evidence_zip",
+    "extract_ipfs_cid",
+    "persist_evidence_ipfs_cid",
 ]

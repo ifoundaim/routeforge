@@ -25,8 +25,18 @@ fi
 
 echo "$RESP" | jq . >"$ATT_PATH"
 
+echo "jq -r '.evidence_uri' \"$ATT_PATH\""
 EURI=$(jq -r '.evidence_uri // empty' "$ATT_PATH")
-[[ -n "$EURI" ]] && echo "Evidence URI: $EURI"
+
+if [[ -n "$EURI" ]]; then
+  echo "Evidence URI: $EURI"
+  if [[ "$EURI" == ipfs://* ]]; then
+    CID="${EURI#ipfs://}"
+    echo "Evidence CID: $CID"
+  fi
+else
+  echo "Evidence URI not found in attestation"
+fi
 
 if [[ -z "$SLUG" || "$SLUG" == "null" ]]; then
   SLUG=$(curl -s "$API/api/releases/$REL_ID" | jq -r '.latest_route.slug // empty' 2>/dev/null || echo "")
@@ -34,6 +44,25 @@ fi
 
 if [[ -n "$SLUG" && "$SLUG" != "null" ]]; then
   echo "Route Detail: $API/app/routes/$SLUG"
+fi
+
+if command -v open >/dev/null 2>&1; then
+  OPEN_CMD="open"
+elif command -v xdg-open >/dev/null 2>&1; then
+  OPEN_CMD="xdg-open"
+else
+  OPEN_CMD=""
+fi
+
+PUBLIC_URL="$API/rel/$REL_ID"
+PRESENT_URL="$API/app/dashboard?present=1"
+
+if [[ -n "$OPEN_CMD" ]]; then
+  "$OPEN_CMD" "$PUBLIC_URL" >/dev/null 2>&1 || echo "Unable to open $PUBLIC_URL"
+  "$OPEN_CMD" "$PRESENT_URL" >/dev/null 2>&1 || echo "Unable to open $PRESENT_URL"
+else
+  echo "Open manually: $PUBLIC_URL"
+  echo "Open manually: $PRESENT_URL"
 fi
 
 exit 0
