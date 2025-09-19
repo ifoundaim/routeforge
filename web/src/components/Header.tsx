@@ -1,13 +1,50 @@
 import React, { useEffect, useState } from 'react'
 
 import { AccountMenu } from './AccountMenu'
+import { PresentToggle } from './PresentToggle'
 import { AuthRequestLink } from '../pages/AuthRequestLink'
 import { useSession } from '../lib/session'
 import '../styles/account.css'
 
+function useCurrentPathname(): string {
+  const readPath = () => {
+    if (typeof window === 'undefined') return '/'
+    return window.location.pathname || '/'
+  }
+
+  const [pathname, setPathname] = useState<string>(readPath)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handle = () => setPathname(readPath())
+
+    const wrap = (method: typeof history.pushState) => (...args: Parameters<typeof history.pushState>) => {
+      const result = method.apply(history, args)
+      handle()
+      return result
+    }
+
+    const originalPushState = history.pushState
+    const originalReplaceState = history.replaceState
+    history.pushState = wrap(originalPushState) as typeof history.pushState
+    history.replaceState = wrap(originalReplaceState) as typeof history.replaceState
+    window.addEventListener('popstate', handle)
+
+    return () => {
+      history.pushState = originalPushState
+      history.replaceState = originalReplaceState
+      window.removeEventListener('popstate', handle)
+    }
+  }, [])
+
+  return pathname
+}
+
 export function Header() {
   const { status, user, error, refresh } = useSession()
   const [showAuth, setShowAuth] = useState(false)
+  const pathname = useCurrentPathname()
 
   const openAuth = () => setShowAuth(true)
   const closeAuth = () => setShowAuth(false)
@@ -47,14 +84,31 @@ export function Header() {
     )
   }
 
+  const action = renderAction()
+  const isAuthenticated = status === 'authenticated' && Boolean(user)
+  const dashboardActive = pathname.startsWith('/app/dashboard') || pathname.startsWith('/app/routes/')
+
   return (
     <>
       <header className="app-header">
         <a href="/app" className="app-header__brand" aria-label="RouteForge home">
           RouteForge
         </a>
-        <div className="app-header__spacer" />
-        {renderAction()}
+        {isAuthenticated ? (
+          <nav className="app-header__nav" role="navigation" aria-label="Primary">
+            <a
+              href="/app/dashboard"
+              className="app-header__nav-link"
+              aria-current={dashboardActive ? 'page' : undefined}
+            >
+              Dashboard
+            </a>
+          </nav>
+        ) : null}
+        <div className="app-header__actions">
+          <PresentToggle />
+          {action ? <div className="app-header__auth">{action}</div> : null}
+        </div>
       </header>
       <AuthRequestLink open={showAuth} onClose={closeAuth} />
     </>

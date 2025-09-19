@@ -53,7 +53,10 @@ class Release(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     version = Column(String(64), nullable=False)
     notes = Column(Text, nullable=True)
+    license_code = Column(String(64), nullable=True)
+    license_custom_text = Column(Text, nullable=True)
     artifact_url = Column(String(2048), nullable=False)
+    artifact_sha256 = Column(String(128), nullable=True)
     # Optional embedding column. In TiDB/MySQL with VECTOR type available, the actual
     # column is created via migration as VECTOR(768). We map it as LargeBinary here to
     # avoid dialect/type issues when reading. The app writes/read via raw SQL when needed.
@@ -119,4 +122,3 @@ class Audit(Base):
     action = Column(String(64), nullable=False)
     meta = Column(JSON, nullable=True)
     ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-

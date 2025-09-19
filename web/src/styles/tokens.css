@@ -1,0 +1,117 @@
+:root {
+  color-scheme: dark;
+  /* Typography */
+  --font-family-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
+  --font-size-base: 1rem;
+  --font-size-sm: 0.875rem;
+  --font-size-lg: 1.125rem;
+  --line-height-base: 1.6;
+  --font-scale: 1;
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Border radii */
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card: 0 16px 40px rgba(15, 23, 42, 0.45);
+  --shadow-card-strong: 0 24px 64px rgba(15, 23, 42, 0.55);
+
+  /* Color palette */
+  --color-brand: #4F46E5;
+  --color-brand-strong: #4338CA;
+  --color-brand-soft: rgba(79, 70, 229, 0.12);
+  --color-success: #22C55E;
+  --color-warn: #F59E0B;
+  --color-danger: #EF4444;
+
+  --color-bg: #0b0f17;
+  --color-surface: #121826;
+  --color-surface-soft: #1b2335;
+  --color-border: #1f2937;
+  --color-border-soft: rgba(148, 163, 184, 0.12);
+  --color-text: #f8fafc;
+  --color-text-strong: #ffffff;
+  --color-text-muted: #94a3b8;
+
+  /* Legacy tokens (bridge existing styles) */
+  --bg: var(--color-bg);
+  --panel: var(--color-surface);
+  --muted: var(--color-text-muted);
+  --text: var(--color-text);
+  --accent: var(--color-brand);
+  --error: var(--color-danger);
+  --ok: var(--color-success);
+}
+
+:root[data-theme="light"],
+:root[data-theme="light"] body {
+  color-scheme: light;
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f1f5f9;
+  --color-border: #d0d6e1;
+  --color-border-soft: rgba(15, 23, 42, 0.08);
+  --color-text: #0f172a;
+  --color-text-strong: #0b1120;
+  --color-text-muted: #475569;
+
+  --bg: var(--color-bg);
+  --panel: var(--color-surface);
+  --muted: var(--color-text-muted);
+  --text: var(--color-text);
+  --accent: var(--color-brand);
+  --error: var(--color-danger);
+  --ok: var(--color-success);
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] body {
+  color-scheme: dark;
+  --color-bg: #0b0f17;
+  --color-surface: #121826;
+  --color-surface-soft: #1b2335;
+  --color-border: #1f2937;
+  --color-border-soft: rgba(148, 163, 184, 0.12);
+  --color-text: #f8fafc;
+  --color-text-strong: #ffffff;
+  --color-text-muted: #94a3b8;
+
+  --bg: var(--color-bg);
+  --panel: var(--color-surface);
+  --muted: var(--color-text-muted);
+  --text: var(--color-text);
+  --accent: var(--color-brand);
+  --error: var(--color-danger);
+  --ok: var(--color-success);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-bg: #f9fafb;
+    --color-surface: #ffffff;
+    --color-surface-soft: #f1f5f9;
+    --color-border: #d0d6e1;
+    --color-border-soft: rgba(15, 23, 42, 0.08);
+    --color-text: #0f172a;
+    --color-text-strong: #0b1120;
+    --color-text-muted: #475569;
+
+    --bg: var(--color-bg);
+    --panel: var(--color-surface);
+    --muted: var(--color-text-muted);
+    --text: var(--color-text);
+    --accent: var(--color-brand);
+    --error: var(--color-danger);
+    --ok: var(--color-success);
+  }
+}

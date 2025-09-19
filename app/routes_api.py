@@ -15,6 +15,7 @@ from .utils.validators import slugify, validate_target_url
 from .auth.magic import SessionUser, is_auth_enabled
 from .auth.accounts import ensure_demo_user
 from .guards import require_owner
+from .licenses import get_license_info
 
 
 logger = logging.getLogger("routeforge.api")
@@ -50,16 +51,40 @@ def _require_user(request: Request, db: Session) -> Tuple[SessionUser, Optional[
     return demo_user, None
 
 
+
+def _require_user_id(request: Request, session_user: SessionUser) -> Tuple[Optional[int], Optional[Response]]:
+    raw_user_id = None
+    if isinstance(session_user, dict):
+        raw_user_id = session_user.get("user_id")
+    else:
+        raw_user_id = getattr(session_user, "user_id", None)
+    if raw_user_id is None:
+        return None, error(request, "auth_required", status_code=401, detail="Authentication required.")
+    try:
+        return int(raw_user_id), None
+    except (TypeError, ValueError):
+        return None, error(request, "auth_required", status_code=401, detail="Authentication required.")
+
+
 @router.post("/projects", response_model=schemas.ProjectOut, status_code=201)
 def create_project(payload: schemas.ProjectCreate, request: Request, db: Session = Depends(get_db)):
     session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
 
-    project_data = payload.model_dump()
-    project_data["owner"] = session_user["email"]
+    user_id, failure = _require_user_id(request, session_user)
+    if failure is not None:
+        return failure
 
-    project = models.Project(user_id=int(session_user["user_id"]), **project_data)
+    owner_email = (session_user.get("email") or "").strip().lower()
+    if not owner_email:
+        return error(request, "auth_required", status_code=401, detail="Authentication required.")
+
+    project_data = payload.model_dump()
+    project_data.pop("user_id", None)
+    project_data["owner"] = owner_email
+
+    project = models.Project(user_id=user_id, **project_data)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -71,7 +96,9 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
     session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
-    current_user_id = int(session_user["user_id"])
+    current_user_id, failure = _require_user_id(request, session_user)
+    if failure is not None:
+        return failure
 
     project = db.get(models.Project, payload.project_id)
     failure = require_owner(
@@ -87,6 +114,7 @@ def create_release(payload: schemas.ReleaseCreate, request: Request, db: Session
         return failure
 
     release_data = payload.model_dump()
+    release_data.pop("user_id", None)
     release = models.Release(user_id=current_user_id, **release_data)
     db.add(release)
     db.commit()
@@ -99,7 +127,9 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
     session_user, failure = _require_user(request, db)
     if failure is not None:
         return failure
-    current_user_id = int(session_user["user_id"])
+    current_user_id, failure = _require_user_id(request, session_user)
+    if failure is not None:
+        return failure
 
     # Minimal happy-path validations
     project = db.get(models.Project, payload.project_id)
@@ -151,6 +181,7 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
         return error(request, "slug_exists", status_code=409, detail=f"Slug '{sanitized_slug}' already exists.")
 
     route_data = payload.model_dump()
+    route_data.pop("user_id", None)
     route_data["slug"] = sanitized_slug
     route_data["target_url"] = normalized_url
     new_route = models.Route(user_id=current_user_id, **route_data)
@@ -198,12 +229,18 @@ def get_release_detail(release_id: int, request: Request, db: Session = Depends(
         .limit(1)
     ).scalar_one_or_none()
 
+    license_info = get_license_info(release.license_code)
+
     return schemas.ReleaseDetailOut(
         id=release.id,
         project_id=release.project_id,
         version=release.version,
         notes=release.notes,
         artifact_url=release.artifact_url,
+        artifact_sha256=release.artifact_sha256,
+        license_code=release.license_code,
+        license_custom_text=release.license_custom_text,
+        license_url=license_info.url if license_info else None,
         created_at=release.created_at,
         project=release.project,
         latest_route=latest_route,

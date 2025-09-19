@@ -243,14 +243,26 @@ def request_link(request: Request, email: str) -> str:
     manager = ensure_magic(request.app)
     if manager is None:
         raise RuntimeError("Auth system is disabled")
-    return manager.issue_link(email)
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        raise ValueError("email is required")
+    return manager.issue_link(normalized_email)
 
 
 def verify_token(request: Request, token: str) -> str:
     manager = get_magic_manager(request)
     if manager is None:
         raise RuntimeError("Auth system is disabled")
-    return manager.consume(token)
+    email = manager.consume(token)
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        raise InvalidMagicLink
+    return normalized_email
+
+
+def dev_login(request: Request, email: str) -> str:
+    """Generate a magic link in development environments."""
+    return request_link(request, email)
 
 
 def set_cookie(response: Response, request: Request, user: SessionUser) -> None:

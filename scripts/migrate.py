@@ -107,9 +107,22 @@ def main():
         else:
             logger.info("OK: FULLTEXT index already present")
 
+        # artifact_sha256 column
+        logger.info("Ensuring releases.artifact_sha256 exists...")
+        sha_col_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'artifact_sha256'
+            """
+        ).scalar()
+        if not sha_col_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN artifact_sha256 VARCHAR(128) NULL")
+            logger.info("OK: releases.artifact_sha256 added")
+        else:
+            logger.info("OK: releases.artifact_sha256 already present")
+
     logger.info("Migration complete.")
 
 
 if __name__ == "__main__":
     main()
-

@@ -2,6 +2,7 @@
 
 .release-meta { margin-bottom: 4px; }
 .release-meta__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.release-meta__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .release-meta__title { margin-bottom: 4px; }
 .release-meta__project { color: var(--muted); font-size: 14px; }
 .release-meta__link { color: var(--accent); font-weight: 600; text-decoration: none; }

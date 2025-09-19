@@ -24,3 +24,26 @@ demo-validate:
 demo-run:
 	scripts/demo_runner.sh
 
+web-install:
+	if command -v pnpm >/dev/null 2>&1; then \
+		(cd web && pnpm install); \
+	else \
+		(cd web && npm install); \
+	fi
+
+web-build:
+	if command -v pnpm >/dev/null 2>&1; then \
+		(cd web && pnpm build); \
+	else \
+		(cd web && npm run build); \
+	fi
+
+web-dev:
+	if command -v pnpm >/dev/null 2>&1; then \
+		(cd web && pnpm dev); \
+	else \
+		(cd web && npm run dev); \
+	fi
+
+smoke-ui:
+	bash scripts/smoke_ui.sh

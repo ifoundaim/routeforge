@@ -24,3 +24,10 @@ export function apiPost<TInput, TOutput>(path: string, body: TInput): Promise<TO
     body: JSON.stringify(body ?? {}),
   })
 }
+
+export function apiPatch<TInput, TOutput>(path: string, body: TInput): Promise<TOutput> {
+  return request<TOutput>(path, {
+    method: 'PATCH',
+    body: JSON.stringify(body ?? {}),
+  })
+}

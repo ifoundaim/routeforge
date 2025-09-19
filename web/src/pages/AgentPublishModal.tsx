@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
+import { LicenseBadge, LicenseStep, type LicenseCode } from '../components/LicenseStep'
 import { SimilarRelease, SimilarReleases } from '../components/SimilarReleases'
 import { ToastShelf, useToastQueue } from '../components/Toast'
+import { apiPatch } from '../lib/api'
 import { isModEnter, isMultilineInput, isPlainEnter } from '../lib/keys'
 import '../styles/agent.css'
 
@@ -14,6 +16,7 @@ type AgentRelease = {
   artifact_url: string
   id?: number
   created_at?: string
+  artifact_sha256?: string | null
 }
 
 type AgentRoute = {
@@ -34,6 +37,14 @@ type AgentPublishResponse = {
   route: AgentRoute | null
   similar_releases: SimilarRelease[]
   audit_sample: AgentAuditEntry[]
+  license_code?: LicenseCode
+  license_text?: string
+}
+
+type ReleaseLicenseResponse = {
+  license_code: LicenseCode
+  license_url?: string | null
+  license_custom_text?: string | null
 }
 
 type AgentPublishModalProps = {
@@ -71,6 +82,8 @@ export function AgentPublishModal({
   const [notes, setNotes] = useState(initialNotes)
   const [result, setResult] = useState<AgentPublishResponse | null>(null)
   const [active, setActive] = useState<ActiveAction>(null)
+  const [licenseCode, setLicenseCode] = useState<LicenseCode>('MIT')
+  const [customLicenseText, setCustomLicenseText] = useState('')
 
   const formRef = useRef<HTMLFormElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
@@ -81,6 +94,16 @@ export function AgentPublishModal({
 
   const isPreviewing = active === 'preview'
   const isPublishing = active === 'publish'
+  const trimmedCustomLicenseText = useMemo(() => customLicenseText.trim(), [customLicenseText])
+  const licenseFields = useMemo(
+    () => ({
+      license_code: licenseCode,
+      license_text: licenseCode === 'CUSTOM' && trimmedCustomLicenseText ? trimmedCustomLicenseText : undefined,
+    }),
+    [licenseCode, trimmedCustomLicenseText],
+  )
+  const previewLicenseCode: LicenseCode = result?.license_code ?? licenseFields.license_code
+  const previewLicenseText = result?.license_text ?? licenseFields.license_text
   const auditEntries = result?.audit_sample || []
 
   useEffect(() => {
@@ -88,7 +111,19 @@ export function AgentPublishModal({
     setArtifactUrl(initialArtifactUrl)
     setNotes(initialNotes)
     setResult(null)
+    setLicenseCode('MIT')
+    setCustomLicenseText('')
   }, [open, initialArtifactUrl, initialNotes])
+
+  useEffect(() => {
+    setResult(prev => {
+      if (!prev) return prev
+      if (prev.license_code === licenseFields.license_code && prev.license_text === licenseFields.license_text) {
+        return prev
+      }
+      return { ...prev, ...licenseFields }
+    })
+  }, [licenseFields])
 
   useEffect(() => {
     if (!open) return
@@ -153,6 +188,16 @@ export function AgentPublishModal({
 
   const resetActive = () => setActive(null)
 
+  const persistLicenseSelection = async (releaseId: number) => {
+    const payload: { license_code: LicenseCode; custom_text?: string } = {
+      license_code: licenseCode,
+    }
+    if (licenseCode === 'CUSTOM' && trimmedCustomLicenseText) {
+      payload.custom_text = trimmedCustomLicenseText
+    }
+    await apiPatch<typeof payload, ReleaseLicenseResponse>(`/api/releases/${releaseId}/license`, payload)
+  }
+
   const request = async ({ dryRun, force }: { dryRun: boolean; force?: boolean }) => {
     const payload: Record<string, unknown> = {
       project_id: projectId,
@@ -205,7 +250,8 @@ export function AgentPublishModal({
     setActive('preview')
     try {
       const { data } = await request({ dryRun: true })
-      setResult(data)
+      const dataWithLicense = { ...data, ...licenseFields }
+      setResult(dataWithLicense)
       if (data.message) {
         pushToast(data.message, 'ok')
       }
@@ -230,8 +276,17 @@ export function AgentPublishModal({
         dryRun: false,
         force: result.decision === 'review',
       })
-      setResult(data)
-      onPublished?.(data)
+      if (data.release?.id) {
+        try {
+          await persistLicenseSelection(data.release.id)
+        } catch (error: any) {
+          console.error('Persist license error', { message: error?.message, releaseId: data.release.id })
+          pushToast('Release saved, but we could not persist the license selection.', 'error')
+        }
+      }
+      const dataWithLicense = { ...data, ...licenseFields }
+      setResult(dataWithLicense)
+      onPublished?.(dataWithLicense)
       const routeSlug = data.route?.slug
       const decisionLabel = routeSlug ? `Route ${routeSlug} minted` : 'Release published'
       pushToast(decisionLabel, 'ok')
@@ -330,6 +385,13 @@ export function AgentPublishModal({
             </form>
           </section>
 
+          <LicenseStep
+            selected={licenseCode}
+            customText={customLicenseText}
+            onSelect={setLicenseCode}
+            onCustomChange={setCustomLicenseText}
+          />
+
           <section className="agent-section" aria-label="Actions">
             <div>
               <h3 className="agent-section__title">Actions</h3>
@@ -378,6 +440,15 @@ export function AgentPublishModal({
                     <span className="agent-card__value">{result.release.version}</span>
                     <span className="agent-card__label">Artifact</span>
                     <span className="agent-card__value agent-card__value--muted">{result.release.artifact_url}</span>
+                    <span className="agent-card__label">License</span>
+                    <span className="agent-card__value">
+                      <span className="license-preview">
+                        <LicenseBadge code={previewLicenseCode} />
+                        {previewLicenseText ? (
+                          <span className="license-preview__text">{previewLicenseText}</span>
+                        ) : null}
+                      </span>
+                    </span>
                     {result.release.notes ? (
                       <>
                         <span className="agent-card__label">Notes</span>
@@ -392,7 +463,9 @@ export function AgentPublishModal({
                       {result.route?.slug ? result.route.slug : 'Route will mint on publish'}
                     </span>
                     <span className="agent-card__label">Target URL</span>
-                    <span className="agent-card__value agent-card__value--muted">{result.route?.target_url || result.release.artifact_url}</span>
+                    <span className="agent-card__value agent-card__value--muted">
+                      {result.route?.target_url || result.release.artifact_url}
+                    </span>
                     <span className="agent-card__label">Project</span>
                     <span className="agent-card__value agent-card__value--muted">{projectName || `#${projectId}`}</span>
                   </div>

@@ -29,12 +29,31 @@ class ReleaseCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class ReleaseLicenseUpdate(BaseModel):
+    license_code: str
+    custom_text: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ReleaseLicenseOut(BaseModel):
+    license_code: str
+    license_url: Optional[str] = None
+    license_custom_text: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ReleaseOut(BaseModel):
     id: int
     project_id: int
     version: str
     notes: Optional[str] = None
     artifact_url: str
+    artifact_sha256: Optional[str] = None
+    license_code: Optional[str] = None
+    license_custom_text: Optional[str] = None
+    license_url: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -62,5 +81,4 @@ class RouteOut(BaseModel):
 class ReleaseDetailOut(ReleaseOut):
     project: ProjectOut
     latest_route: Optional[RouteOut] = None
-
 
