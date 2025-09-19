@@ -421,4 +421,126 @@ class ChainClient:
         return token_id
 
 
-__all__ = ["AttestationError", "AttestationResult", "ChainClient"]
+class StarknetClient:
+    """Minimal Starknet client used for wallet-submitted mints with demo fallback.
+
+    Notes:
+    - We do not relay transactions server-side; only accept a wallet-provided tx_hash.
+    - If STARKNET_CONTRACT is not configured, we always fall back to demo log path.
+    - Metadata URI handling mirrors the EVM client to ensure parity.
+    """
+
+    def __init__(self) -> None:
+        self._rpc_url = (os.getenv("STARKNET_RPC_URL") or "").strip()
+        self._contract_address = (os.getenv("STARKNET_CONTRACT") or "").strip()
+        explorer_override = (os.getenv("STARKNET_EXPLORER") or "").strip()
+        # Default explorer: Starkscan Sepolia
+        self._explorer_tx_base = explorer_override or "https://sepolia.starkscan.co/tx"
+
+    # ------------------------------------------------------------------
+    # Public helpers
+    # ------------------------------------------------------------------
+    def describe_config(self) -> Dict[str, Any]:
+        has_contract = bool(self._contract_address)
+        mode = "starknet" if has_contract else "demo"
+        return {
+            "rpc_url": self._rpc_url or None,
+            "contract": self._contract_address or None,
+            "requires_wallet": True,
+            "mode": mode,
+            "explorer_tx_base": self._explorer_tx_base,
+            "wallet_enabled": has_contract,
+        }
+
+    # ------------------------------------------------------------------
+    # Flows
+    # ------------------------------------------------------------------
+    def send_log(
+        self,
+        *,
+        release_id: int,
+        metadata: Dict[str, str],
+        release_info: Dict[str, Optional[str]],
+    ) -> AttestationResult:
+        tx_hash = f"starknet-log-{release_id}-{secrets.token_hex(8)}"
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
+        return AttestationResult(
+            tx_hash=tx_hash,
+            metadata_uri=metadata_uri,
+            token_id=None,
+            mode="demo",
+        )
+
+    def mint_wallet(
+        self,
+        *,
+        release_id: int,
+        metadata: Dict[str, str],
+        release_info: Dict[str, Optional[str]],
+        tx_hash: Optional[str] = None,
+    ) -> AttestationResult:
+        # Not configured → always demo path
+        if not self._contract_address:
+            logger.info("Starknet not configured; using demo log path")
+            return self.send_log(
+                release_id=release_id,
+                metadata=metadata,
+                release_info=release_info,
+            )
+
+        metadata_uri = self._ensure_metadata_uri(release_id, metadata, release_info)
+
+        if not tx_hash:
+            # Wallet signature required for Starknet path
+            raise AttestationError("wallet_tx_hash_required")
+
+        # We do not introspect receipts for token_id on Starknet here.
+        return AttestationResult(
+            tx_hash=tx_hash,
+            metadata_uri=metadata_uri,
+            token_id=None,
+            mode="starknet",
+        )
+
+    # ------------------------------------------------------------------
+    # Internal helpers (reuse EVM helpers for metadata)
+    # ------------------------------------------------------------------
+    def _ensure_metadata_uri(
+        self, release_id: int, metadata: Dict[str, str], release_info: Dict[str, Optional[str]]
+    ) -> Optional[str]:
+        # Delegate to shared logic in EVM client for parity
+        # (copy the minimal code to avoid coupling)
+        session = try_get_session()
+        release = None
+        persisted_cid: Optional[str] = None
+        try:
+            if session is not None:
+                release = session.get(models.Release, release_id)
+
+            uris = get_release_evidence_uris(release_id, release)
+            stored_ipfs = uris.get("ipfs")
+            if stored_ipfs and release is not None:
+                logger.info("Reusing stored evidence CID for release %s", release_id)
+                metadata["evidence_uri"] = stored_ipfs
+                return stored_ipfs
+
+            evidence_uri = metadata.get("evidence_uri")
+            if not evidence_uri:
+                evidence_uri = uris.get("http")
+
+            if session is not None and release is not None:
+                persisted_cid = persist_evidence_ipfs_cid(session, release, evidence_uri)
+            if persisted_cid:
+                ipfs_uri = f"ipfs://{persisted_cid}"
+                metadata["evidence_uri"] = ipfs_uri
+                return ipfs_uri
+
+            if evidence_uri:
+                metadata["evidence_uri"] = evidence_uri
+            return evidence_uri
+        finally:
+            if session is not None:
+                session.close()
+
+
+__all__ = ["AttestationError", "AttestationResult", "ChainClient", "StarknetClient"]
