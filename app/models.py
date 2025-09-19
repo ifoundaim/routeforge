@@ -126,3 +126,22 @@ class Audit(Base):
     action = Column(String(64), nullable=False)
     meta = Column(JSON, nullable=True)
     ts = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        UniqueConstraint("key_id", name="uq_api_keys_key_id"),
+        Index("ix_api_keys_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key_id = Column(String(64), nullable=False)
+    # We store a randomly generated signing secret string here (named secret_hash per spec)
+    secret_hash = Column(String(128), nullable=False)
+    active = Column(Integer, nullable=False, server_default="1")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")

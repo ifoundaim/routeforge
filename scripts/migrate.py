@@ -134,6 +134,25 @@ def main():
         else:
             logger.info("OK: releases.evidence_ipfs_cid already present")
 
+        # api_keys table
+        logger.info("Ensuring api_keys table exists...")
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS api_keys (
+              id BIGINT PRIMARY KEY AUTO_INCREMENT,
+              user_id BIGINT NOT NULL,
+              key_id VARCHAR(64) NOT NULL,
+              secret_hash VARCHAR(128) NOT NULL,
+              active TINYINT NOT NULL DEFAULT 1,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_used_at TIMESTAMP NULL,
+              UNIQUE KEY uq_api_keys_key_id (key_id),
+              INDEX ix_api_keys_user_id (user_id)
+            )
+            """
+        )
+        logger.info("OK: api_keys ready")
+
         # token_id column
         logger.info("Ensuring releases.token_id exists...")
         token_col_exists = conn.exec_driver_sql(

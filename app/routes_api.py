@@ -14,6 +14,7 @@ from .db import get_db
 from . import models, schemas
 from .middleware import get_request_user, json_error_response
 from .utils.validators import slugify, validate_target_url
+from .security.hmac import verify_hmac
 from .redirects.sanity import domain_allowed, get_allowed_schemes, get_blocked_domains, head_ok
 from .worker.queue import queue
 from .agent.publish import apply_artifact_hash
@@ -54,6 +55,48 @@ def _require_user(request: Request, db: Session) -> Tuple[SessionUser, Optional[
     request.state.user = demo_user
     return demo_user, None
 
+
+@router.post("/publish")
+def publish_with_hmac(payload: dict, request: Request, db: Session = Depends(get_db)):
+    body = request.scope.get("body")  # type: ignore[assignment]
+    if isinstance(body, (bytes, bytearray)):
+        body_bytes = bytes(body)
+    else:
+        # If body not captured in scope (common), re-serialize minimal payload
+        import json as _json
+
+        body_bytes = _json.dumps(payload or {}).encode("utf-8")
+
+    user_id, err = verify_hmac(request, body_bytes, db)
+    if err is not None:
+        return error(request, "auth_required" if err == "hmac_required" else "hmac_invalid", status_code=401)
+
+    # Minimal validation
+    try:
+        project_id = int((payload or {}).get("project_id"))
+    except Exception:
+        return error(request, "invalid_project_id", status_code=422)
+    artifact_url = (payload or {}).get("artifact_url")
+    if not artifact_url or not isinstance(artifact_url, str):
+        return error(request, "invalid_artifact_url", status_code=422)
+    notes = (payload or {}).get("notes")
+    if notes is not None and not isinstance(notes, str):
+        notes = str(notes)
+
+    project = db.get(models.Project, project_id)
+    if project is None:
+        return error(request, "project_not_found", status_code=404)
+    if int(project.user_id) != int(user_id):
+        return error(request, "forbidden", status_code=403)
+
+    # Create release and route similar to agent.publish (simplified)
+    release = models.Release(user_id=int(user_id), project_id=project_id, version="auto", notes=notes, artifact_url=artifact_url)
+    db.add(release)
+    db.commit()
+    db.refresh(release)
+
+    # No auto route mint here; return release id
+    return {"id": release.id, "project_id": project_id, "artifact_url": artifact_url, "notes": notes}
 
 
 def _require_user_id(request: Request, session_user: SessionUser) -> Tuple[Optional[int], Optional[Response]]:
