@@ -21,7 +21,8 @@ from .routes_public import router as public_router
 from .routes_uploads import router as uploads_router
 from .routes_auth import router as auth_router
 from .middleware import RequestContextMiddleware
-from .middleware.rate_limit import RateLimitMiddleware
+# Disable rate limit middleware by default in container
+RateLimitMiddleware = None  # type: ignore
 from .errors import install_exception_handlers
 
 
@@ -50,7 +51,6 @@ app.add_middleware(
 
 # Request context and timing
 app.add_middleware(RequestContextMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 # Exception handlers for consistent error shapes
 install_exception_handlers(app)

@@ -30,7 +30,7 @@ class InProcessQueue:
 
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
-        self._queue: "asyncio.Queue[tuple[str, TaskFunc, Any]]" = asyncio.Queue(loop=self._loop)  # type: ignore[call-arg]
+        self._queue: "asyncio.Queue[tuple[str, TaskFunc, Any]]" = asyncio.Queue()
         self._tasks: Dict[str, TaskRecord] = {}
 
         self._worker = threading.Thread(target=self._run_loop, daemon=True)
@@ -41,6 +41,7 @@ class InProcessQueue:
 
     def _run_loop(self) -> None:
         asyncio.set_event_loop(self._loop)
+        self._queue = asyncio.Queue()
         self._loop.create_task(self._consumer())
         self._loop.run_forever()
 
