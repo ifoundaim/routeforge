@@ -4,6 +4,8 @@ import { DemoBadge } from '../components/DemoBadge'
 import { LicenseBadge, type LicenseCode } from '../components/LicenseStep'
 import { MintStatusBadge } from '../components/MintStatusBadge'
 import { ProvenanceModal } from '../components/ProvenanceModal'
+import { usePresentMode } from './AppLayout'
+import Tour from '../components/Tour'
 import {
   AttestActions,
   type AttestMetadataFields,
@@ -11,6 +13,7 @@ import {
 } from '../components/provenance/AttestActions'
 import { apiGet, apiPost } from '../lib/api'
 import '../styles/provenance.css'
+import '../styles/tour.css'
 
 type ReleaseRoute = {
   id: number
@@ -128,7 +131,9 @@ function buildDemoPrepare(releaseId: number): PrepareCopyrightResponse {
 }
 
 export function Release() {
+  const presentCtx = usePresentMode()
   const toast = useToast()
+  const [tourOpen, setTourOpen] = useState(false)
   const releaseId = useMemo(() => {
     const parts = window.location.pathname.split('/').filter(Boolean)
     const maybe = parts[parts.length - 1]
@@ -320,7 +325,7 @@ export function Release() {
             <span className="provenance-detail__value">{projectOwner}</span>
           </div>
         ) : null}
-        <div className="provenance-detail">
+        <div className="provenance-detail" data-tour="route">
           <span className="provenance-detail__label">Latest route</span>
           <span className="provenance-detail__value">
             {latestRouteHref ? (
@@ -384,7 +389,7 @@ export function Release() {
   )
 
   const evidenceCard = (
-    <div className="card release-section">
+    <div className="card release-section" data-tour="evidence">
       <div className="release-section__header">
         <div className="heading release-section__title">Evidence</div>
       </div>
@@ -443,7 +448,7 @@ export function Release() {
 
   return (
     <div className="container provenance-container">
-      {infoCard}
+      <div data-tour="published">{infoCard}</div>
       {licenseCard}
       {evidenceCard}
 
@@ -458,7 +463,7 @@ export function Release() {
           {demoMode && <DemoBadge />}
         </div>
 
-        <div className="provenance-actions">
+        <div className="provenance-actions" data-tour="attest">
           <AttestActions
             releaseId={releaseId}
             disabled={!release || loadingRelease}
@@ -467,7 +472,11 @@ export function Release() {
             onAttestModal={handleAttestModal}
           />
           {actions.map(action => (
-            <div key={action.key} className="provenance-action">
+            <div
+              key={action.key}
+              className="provenance-action"
+              data-tour={action.key === 'filing' ? 'filing' : undefined}
+            >
               <div className="provenance-action__text">
                 <div className="provenance-action__title">{action.title}</div>
                 <p className="provenance-action__desc">{action.description}</p>
@@ -594,6 +603,56 @@ export function Release() {
       </ProvenanceModal>
 
       {toast.view}
+
+      {presentCtx?.present && tourOpen ? (
+        <Tour
+          active={tourOpen}
+          onClose={() => setTourOpen(false)}
+          steps={[
+            {
+              key: 'publish',
+              selector: '[data-tour="published"] .release-meta__header',
+              title: 'Publish',
+              body: 'Releases are published with metadata, artifact, and project context.'
+            },
+            {
+              key: 'route',
+              selector: '[data-tour="route"] .provenance-detail__value',
+              title: 'Open Route',
+              body: 'Jump to the latest minted route for this release.'
+            },
+            {
+              key: 'evidence',
+              selector: '[data-tour="evidence"]',
+              title: 'Evidence',
+              body: 'Download the full evidence package and copy canonical links.'
+            },
+            {
+              key: 'attest',
+              selector: '[data-tour="attest"] .provenance-action__title',
+              title: 'Attest',
+              body: 'Mint an NFT receipt on Base or fall back to an on-chain log.'
+            },
+            {
+              key: 'filing',
+              selector: '[data-tour="filing"] button.primary',
+              title: 'Filing',
+              body: 'Prepare a copyright filing package for this release.'
+            },
+          ]}
+        />
+      ) : null}
+
+      {presentCtx?.present && !tourOpen ? (
+        <button
+          type="button"
+          className="primary"
+          style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 10000 }}
+          onClick={() => setTourOpen(true)}
+        >
+          Start tour
+        </button>
+      ) : null}
     </div>
   )
 }

@@ -1,0 +1,56 @@
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.tour-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.5);
+  backdrop-filter: blur(1px);
+  pointer-events: auto;
+}
+
+.tour-highlight {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(10, 10, 14, 0.5), 0 6px 24px rgba(0, 0, 0, 0.35);
+  border: 2px solid var(--accent, #6e6eff);
+  background: transparent;
+  transition: left 120ms ease, top 120ms ease, width 120ms ease, height 120ms ease;
+  pointer-events: none;
+}
+
+.tour-popover {
+  position: absolute;
+  min-width: 260px;
+  max-width: 360px;
+  background: var(--bg, #0f1115);
+  color: var(--fg, #d8e1f0);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.tour-popover__title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.tour-popover__body {
+  font-size: 13px;
+  color: var(--muted, #9aa7bd);
+}
+
+.tour-popover__controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+
