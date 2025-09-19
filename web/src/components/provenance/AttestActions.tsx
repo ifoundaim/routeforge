@@ -6,6 +6,7 @@ import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from 'w
 
 import { apiGet, apiPost } from '../../lib/api'
 import { WalletProvider, useStarknetConfig, connectStarknetWallet } from '../../wallet'
+import { MetadataRow } from './MetadataRow'
 import type { StarknetWallet } from '../../wallet/starknet'
 
 const BASE_EXPLORER_FALLBACK = 'https://sepolia.basescan.org/tx'
@@ -479,17 +480,7 @@ function AttestActionsInner({ releaseId, disabled, onToast, metadataFields, onAt
             </a>
           </div>
         )}
-        {result?.metadataUri && (
-          <div className="provenance-hint" style={{ marginTop: 8 }}>
-            <span>Metadata URI:</span>
-            <a className="provenance-link" href={result.metadataUri} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>
-              {result.metadataUri}
-            </a>
-            <span style={{ marginLeft: 6 }}>
-              <CopyButtonLocal text={result.metadataUri} />
-            </span>
-          </div>
-        )}
+        {result?.metadataUri && <MetadataRow uri={result.metadataUri} />}
         {(typeof result?.tokenId === 'number' || result?.tokenId) && (
           <div className="provenance-hint" style={{ marginTop: 8 }}>
             <span>Token ID:</span>
@@ -527,19 +518,20 @@ function AttestActionsInner({ releaseId, disabled, onToast, metadataFields, onAt
             <a className="provenance-link" href={starkResult.explorerUrl} target="_blank" rel="noreferrer">
               {starkResult.txHash}
             </a>
+            {starkResult.mode === 'nft' && (
+              <a
+                className="provenance-link"
+                href={starkResult.explorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ marginLeft: 10 }}
+              >
+                View on Starkscan
+              </a>
+            )}
           </div>
         )}
-        {starkResult?.metadataUri && (
-          <div className="provenance-hint" style={{ marginTop: 8 }}>
-            <span>Metadata URI:</span>
-            <a className="provenance-link" href={starkResult.metadataUri} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>
-              {starkResult.metadataUri}
-            </a>
-            <span style={{ marginLeft: 6 }}>
-              <CopyButtonLocal text={starkResult.metadataUri} />
-            </span>
-          </div>
-        )}
+        {starkResult?.metadataUri && <MetadataRow uri={starkResult.metadataUri} />}
       </div>
       <button
         className="primary"

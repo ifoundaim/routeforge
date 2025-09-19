@@ -508,36 +508,67 @@ class StarknetClient:
     def _ensure_metadata_uri(
         self, release_id: int, metadata: Dict[str, str], release_info: Dict[str, Optional[str]]
     ) -> Optional[str]:
-        # Delegate to shared logic in EVM client for parity
-        # (copy the minimal code to avoid coupling)
+        # Parity with EVM client: ensure evidence URI, reuse pinned metadata CID if present,
+        # otherwise build metadata JSON, pin to IPFS, and persist CID.
         session = try_get_session()
         release = None
-        persisted_cid: Optional[str] = None
+        persisted_evidence_cid: Optional[str] = None
         try:
             if session is not None:
                 release = session.get(models.Release, release_id)
 
+            # Ensure evidence_uri is set and IPFS evidence CID is persisted/reused
             uris = get_release_evidence_uris(release_id, release)
             stored_ipfs = uris.get("ipfs")
             if stored_ipfs and release is not None:
                 logger.info("Reusing stored evidence CID for release %s", release_id)
                 metadata["evidence_uri"] = stored_ipfs
-                return stored_ipfs
+            else:
+                evidence_uri = metadata.get("evidence_uri")
+                if not evidence_uri:
+                    evidence_uri = uris.get("http")
+                if session is not None and release is not None:
+                    persisted_evidence_cid = persist_evidence_ipfs_cid(session, release, evidence_uri)
+                if persisted_evidence_cid:
+                    metadata["evidence_uri"] = f"ipfs://{persisted_evidence_cid}"
+                elif evidence_uri:
+                    metadata["evidence_uri"] = evidence_uri
 
-            evidence_uri = metadata.get("evidence_uri")
-            if not evidence_uri:
-                evidence_uri = uris.get("http")
+            # Reuse existing metadata CID if present on the release
+            if release is not None and getattr(release, "metadata_ipfs_cid", None):
+                return f"ipfs://{release.metadata_ipfs_cid}"
+
+            # Build metadata JSON
+            name = None
+            ver = (release_info.get("version") if isinstance(release_info, dict) else None) or None
+            if ver:
+                name = f"RouteForge Release v{ver}"
+            description = None
+            metadata_obj = build_nft_metadata(
+                release_id=release_id,
+                name=name,
+                description=description,
+                evidence_uri=metadata.get("evidence_uri") or "",
+                artifact_sha256=metadata.get("artifact_sha256") or None,
+                license_code=metadata.get("license_code") or None,
+            )
+
+            # Pin JSON to IPFS if configured
+            cid = pin_json(metadata_obj, filename=f"release-{release_id}-metadata.json")
+            if not cid:
+                return metadata.get("evidence_uri")
 
             if session is not None and release is not None:
-                persisted_cid = persist_evidence_ipfs_cid(session, release, evidence_uri)
-            if persisted_cid:
-                ipfs_uri = f"ipfs://{persisted_cid}"
-                metadata["evidence_uri"] = ipfs_uri
-                return ipfs_uri
+                release.metadata_ipfs_cid = cid
+                session.add(release)
+                try:
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                else:
+                    logger.info("Persisted metadata CID %s for release %s", cid, release_id)
 
-            if evidence_uri:
-                metadata["evidence_uri"] = evidence_uri
-            return evidence_uri
+            return f"ipfs://{cid}"
         finally:
             if session is not None:
                 session.close()
