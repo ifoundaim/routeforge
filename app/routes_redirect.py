@@ -14,6 +14,7 @@ from . import models
 from .middleware import json_error_response
 from .utils.enrich import parse_ref, serialize_ref
 from .utils.validators import validate_target_url
+from .hooks.dispatcher import enqueue_event
 
 
 logger = logging.getLogger("routeforge.redirect")
@@ -113,6 +114,10 @@ def redirect_slug(slug: str, request: Request, db: Optional[Session] = Depends(t
     hit = models.RouteHit(route_id=route.id, ip=ip, ua=ua, ref=serialized_ref)
     db.add(hit)
     db.commit()
+    try:
+        enqueue_event(int(route.user_id), "route_hit", {"route_id": int(route.id), "slug": route.slug})
+    except Exception:
+        pass
 
     allowed_schemes = _get_allowed_target_schemes()
     try:

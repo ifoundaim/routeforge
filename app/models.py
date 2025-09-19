@@ -145,3 +145,22 @@ class APIKey(Base):
     last_used_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User")
+
+
+class Webhook(Base):
+    __tablename__ = "webhooks"
+    __table_args__ = (
+        Index("ix_webhooks_user_id", "user_id"),
+        Index("ix_webhooks_event", "event"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    url = Column(String(2048), nullable=False)
+    secret = Column(String(128), nullable=False)
+    event = Column(String(64), nullable=False)  # route_hit, release_published
+    active = Column(Integer, nullable=False, server_default="1")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_failed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")

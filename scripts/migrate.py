@@ -153,6 +153,26 @@ def main():
         )
         logger.info("OK: api_keys ready")
 
+        # webhooks table
+        logger.info("Ensuring webhooks table exists...")
+        conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS webhooks (
+              id BIGINT PRIMARY KEY AUTO_INCREMENT,
+              user_id BIGINT NOT NULL,
+              url VARCHAR(2048) NOT NULL,
+              secret VARCHAR(128) NOT NULL,
+              event VARCHAR(64) NOT NULL,
+              active TINYINT NOT NULL DEFAULT 1,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              last_failed_at TIMESTAMP NULL,
+              INDEX ix_webhooks_user_id (user_id),
+              INDEX ix_webhooks_event (event)
+            )
+            """
+        )
+        logger.info("OK: webhooks ready")
+
         # token_id column
         logger.info("Ensuring releases.token_id exists...")
         token_col_exists = conn.exec_driver_sql(

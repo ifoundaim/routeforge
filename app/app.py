@@ -21,6 +21,7 @@ from .routes_public import router as public_router
 from .routes_uploads import router as uploads_router
 from .routes_auth import router as auth_router
 from .routes_api_keys import router as api_keys_router
+from .routes_webhooks import router as webhooks_router
 from .middleware import RequestContextMiddleware
 # Disable rate limit middleware by default in container
 RateLimitMiddleware = None  # type: ignore
@@ -70,6 +71,7 @@ app.include_router(ip_router)
 app.include_router(public_router)
 app.include_router(uploads_router)
 app.include_router(api_keys_router)
+app.include_router(webhooks_router)
 
 if is_auth_enabled():
     ensure_magic(app)
