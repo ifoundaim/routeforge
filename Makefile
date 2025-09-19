@@ -1,4 +1,5 @@
 .PHONY: run migrate seed fmt lint demo-seed demo-validate demo-run og-preview
+.PHONY: docker-build docker-up docker-down
 
 run:
 	uvicorn app.app:app --reload --port $${PORT:-8000}
@@ -54,3 +55,13 @@ og-preview:
 		exit 1; \
 	fi
 	API="$$API" PORT="$$PORT" bash scripts/og_preview.sh "$(REL)"
+
+docker-build:
+	docker compose build
+
+docker-up:
+	TIDB_DSN="$$TIDB_DSN" AUTH_ENABLED="$$AUTH_ENABLED" SESSION_SECRET="$$SESSION_SECRET" APP_BASE_URL="$$APP_BASE_URL" \
+	VITE_API_BASE="$$VITE_API_BASE" docker compose up -d
+
+docker-down:
+	docker compose down

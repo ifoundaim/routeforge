@@ -134,6 +134,34 @@ def main():
         else:
             logger.info("OK: releases.evidence_ipfs_cid already present")
 
+        # token_id column
+        logger.info("Ensuring releases.token_id exists...")
+        token_col_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'token_id'
+            """
+        ).scalar()
+        if not token_col_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN token_id BIGINT NULL")
+            logger.info("OK: releases.token_id added")
+        else:
+            logger.info("OK: releases.token_id already present")
+
+        # metadata_ipfs_cid column
+        logger.info("Ensuring releases.metadata_ipfs_cid exists...")
+        mcol_exists = conn.exec_driver_sql(
+            """
+            SELECT COUNT(1) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'releases' AND COLUMN_NAME = 'metadata_ipfs_cid'
+            """
+        ).scalar()
+        if not mcol_exists:
+            conn.exec_driver_sql("ALTER TABLE releases ADD COLUMN metadata_ipfs_cid VARCHAR(128) NULL")
+            logger.info("OK: releases.metadata_ipfs_cid added")
+        else:
+            logger.info("OK: releases.metadata_ipfs_cid already present")
+
     logger.info("Migration complete.")
 
 

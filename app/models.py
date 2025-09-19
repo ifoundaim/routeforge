@@ -58,6 +58,9 @@ class Release(Base):
     artifact_url = Column(String(2048), nullable=False)
     artifact_sha256 = Column(String(128), nullable=True)
     evidence_ipfs_cid = Column(String(128), nullable=True)
+    # NFT tracking
+    token_id = Column(Integer, nullable=True)
+    metadata_ipfs_cid = Column(String(128), nullable=True)
     # Optional embedding column. In TiDB/MySQL with VECTOR type available, the actual
     # column is created via migration as VECTOR(768). We map it as LargeBinary here to
     # avoid dialect/type issues when reading. The app writes/read via raw SQL when needed.

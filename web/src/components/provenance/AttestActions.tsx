@@ -66,6 +66,26 @@ interface AttestResultSnapshot {
   txHash: string
   explorerUrl: string
   mode: 'log' | 'nft'
+  metadataUri?: string | null
+  tokenId?: number | null
+}
+
+function CopyButtonLocal({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <button className={`ghost provenance-copy ${copied ? 'is-copied' : ''}`} type="button" onClick={handleCopy}>
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
 }
 
 function parseMintSignature(signature: string): { name: string; inputs: string[] } {
@@ -191,7 +211,7 @@ function AttestActionsInner({ releaseId, disabled, onToast, metadataFields, onAt
         { mode: 'log' }
       )
       const explorerUrl = buildExplorerUrl(config?.explorer_tx_base, response.tx_hash)
-      setResult({ txHash: response.tx_hash, explorerUrl, mode: 'log' })
+      setResult({ txHash: response.tx_hash, explorerUrl, mode: 'log', metadataUri: response.metadata_uri, tokenId: response.token_id })
       const metadata = composeMetadataFields(releaseId, metadataFields)
       onAttestModal?.({
         status: 'success',
@@ -271,7 +291,7 @@ function AttestActionsInner({ releaseId, disabled, onToast, metadataFields, onAt
       )
 
       const explorerUrl = buildExplorerUrl(config.explorer_tx_base, response.tx_hash)
-      setResult({ txHash: response.tx_hash, explorerUrl, mode: 'nft' })
+      setResult({ txHash: response.tx_hash, explorerUrl, mode: 'nft', metadataUri: response.metadata_uri, tokenId: response.token_id })
       const metadata = composeMetadataFields(releaseId, metadataFields)
       onAttestModal?.({
         status: 'success',
@@ -321,6 +341,28 @@ function AttestActionsInner({ releaseId, disabled, onToast, metadataFields, onAt
             <a className="provenance-link" href={result.explorerUrl} target="_blank" rel="noreferrer">
               {result.txHash}
             </a>
+          </div>
+        )}
+        {result?.metadataUri && (
+          <div className="provenance-hint" style={{ marginTop: 8 }}>
+            <span>Metadata URI:</span>
+            <a className="provenance-link" href={result.metadataUri} target="_blank" rel="noreferrer" style={{ marginLeft: 6 }}>
+              {result.metadataUri}
+            </a>
+            <span style={{ marginLeft: 6 }}>
+              <CopyButtonLocal text={result.metadataUri} />
+            </span>
+          </div>
+        )}
+        {(typeof result?.tokenId === 'number' || result?.tokenId) && (
+          <div className="provenance-hint" style={{ marginTop: 8 }}>
+            <span>Token ID:</span>
+            <code className="provenance-detail__code" style={{ marginLeft: 6 }}>{result?.tokenId}</code>
+            {result?.tokenId != null && (
+              <span style={{ marginLeft: 6 }}>
+                <CopyButtonLocal text={String(result.tokenId)} />
+              </span>
+            )}
           </div>
         )}
       </div>
