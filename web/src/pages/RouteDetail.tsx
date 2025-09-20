@@ -307,8 +307,7 @@ export function RouteDetail() {
           <thead>
             <tr>
               <th>When</th>
-              <th>IP</th>
-              <th>Ref / UA</th>
+              <th>Referrer</th>
               <th>utm_source</th>
             </tr>
           </thead>
@@ -316,9 +315,8 @@ export function RouteDetail() {
             {items.map(hit => (
               <tr key={hit.id}>
                 <td>{formatRelativeTime(hit.ts)}</td>
-                <td>{hit.ip || '—'}</td>
-                <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {hit.ref || hit.ua || '—'}
+                <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {hit.ref || '—'}
                 </td>
                 <td>{hit.utm_source || '—'}</td>
               </tr>
