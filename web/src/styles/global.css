@@ -218,13 +218,13 @@ body.present .app-shell .card {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
-  background: rgba(9, 13, 23, 0.85);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--color-border-soft);
+  background: #0f172a !important;
+  border-bottom: 3px solid #3b82f6 !important;
   position: sticky;
   top: 0;
   z-index: 20;
   min-height: var(--header-height);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 
 :root.present .app-shell .app-header,
@@ -233,11 +233,12 @@ body.present .app-shell .app-header {
 }
 
 .app-shell .app-header__brand {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: 1.4rem !important;
+  font-weight: 800 !important;
+  color: #ffffff !important;
   text-decoration: none;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.5px !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
 }
 
 .app-shell .app-header__nav {
@@ -250,25 +251,30 @@ body.present .app-shell .app-header {
 .app-shell .app-header__nav-link {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700 !important;
   text-decoration: none;
-  color: var(--color-text-muted);
+  color: #e2e8f0 !important;
   transition: color 0.2s ease, background 0.2s ease;
+  border: 1px solid transparent !important;
 }
 
 .app-shell .app-header__nav-link:hover,
 .app-shell .app-header__nav-link:focus {
-  color: var(--color-text);
-  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff !important;
+  background: #1e40af !important;
   outline: none;
+  border: 1px solid #3b82f6 !important;
 }
 
 .app-shell .app-header__nav-link[aria-current='page'] {
-  color: var(--color-text);
-  background: rgba(59, 130, 246, 0.15);
+  color: #ffffff !important;
+  background: #1e40af !important;
+  font-weight: 800 !important;
+  border: 1px solid #3b82f6 !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
 }
 
 .app-shell .app-header__actions {
@@ -288,11 +294,13 @@ body.present .app-shell .app-header {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--color-text);
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid #374151 !important;
+  border-radius: 8px;
+  color: #e2e8f0 !important;
   font-size: 0.95rem;
+  font-weight: 600 !important;
 }
 
 .present-toggle__meta {
@@ -304,12 +312,14 @@ body.present .app-shell .app-header {
 
 .present-toggle__title {
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 700 !important;
+  color: #ffffff !important;
 }
 
 .present-toggle__hint {
   font-size: 0.75rem;
-  color: var(--color-text-muted);
+  color: #94a3b8 !important;
+  font-weight: 500 !important;
 }
 
 .present-toggle--forced .present-toggle__hint {
