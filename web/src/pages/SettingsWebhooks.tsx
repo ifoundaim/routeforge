@@ -9,6 +9,9 @@ type Webhook = {
   event: 'release_published' | 'route_hit' | string
   active: boolean
   secret: string
+  last_delivery_status?: number | null
+  last_delivery_ts?: string | null
+  last_payload_preview?: string | null
 }
 
 type TestResult = {
@@ -119,6 +122,8 @@ export function SettingsWebhooks() {
         throw new Error((data && (data as any).error) || `${res.status}`)
       }
       setLastResult(data)
+      // Refresh items so last delivery info updates
+      await load()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Test delivery failed.'
       setError(message)
@@ -201,12 +206,24 @@ export function SettingsWebhooks() {
                         <span className="badge">{w.event}</span>
                         <span className="dot" aria-hidden>•</span>
                         <span className={w.active ? 'ok' : 'muted'}>{w.active ? 'Active' : 'Inactive'}</span>
+                        {w.last_delivery_ts ? (
+                          <>
+                            <span className="dot" aria-hidden>•</span>
+                            <span title={w.last_delivery_ts}>Last: {w.last_delivery_status || '—'} @ {w.last_delivery_ts}</span>
+                          </>
+                        ) : null}
                       </div>
                       <div className="webhooks-item__secret">
                         <span className="muted">Secret</span>
                         <code>{w.secret}</code>
                         <button className="ghost" type="button" onClick={() => void copy(w.secret)}>Copy</button>
                       </div>
+                      {w.last_payload_preview ? (
+                        <div className="webhooks-item__preview">
+                          <span className="muted">Payload</span>
+                          <code className="truncate">{w.last_payload_preview}</code>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="webhooks-item__actions">
                       <button type="button" onClick={() => void onTest(w.id)} disabled={testing === w.id}>{testing === w.id ? 'Sending…' : 'Send test'}</button>

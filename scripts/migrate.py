@@ -169,6 +169,9 @@ def main():
               active TINYINT NOT NULL DEFAULT 1,
               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
               last_failed_at TIMESTAMP NULL,
+              last_delivery_status INT NULL,
+              last_delivery_ts TIMESTAMP NULL,
+              last_payload_preview VARCHAR(255) NULL,
               INDEX ix_webhooks_user_id (user_id),
               INDEX ix_webhooks_event (event)
             )
