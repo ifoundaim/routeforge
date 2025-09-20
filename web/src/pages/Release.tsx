@@ -1,18 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { DemoBadge } from '../components/DemoBadge'
-import { LicenseBadge, type LicenseCode } from '../components/LicenseStep'
 import { MintStatusBadge } from '../components/MintStatusBadge'
 import { ProvenanceModal } from '../components/ProvenanceModal'
 import { usePresentMode } from './AppLayout'
 import Tour from '../components/Tour'
-import {
-  AttestActions,
-  type AttestMetadataFields,
-  type AttestModalPayload,
-} from '../components/provenance/AttestActions'
+import type { AttestMetadataFields, AttestModalPayload } from '../components/provenance/AttestActions'
+import { AttestSection } from '../components/Release/Attest'
+import { EvidenceSection } from '../components/Release/Evidence'
+import { LicenseSection } from '../components/Release/License'
+import { PublishSection } from '../components/Release/Publish'
+import { PublicShareSection } from '../components/Release/PublicShare'
 import { apiGet, apiPost } from '../lib/api'
 import '../styles/provenance.css'
+import '../styles/release.css'
 import '../styles/tour.css'
 
 type ReleaseRoute = {
@@ -27,7 +28,7 @@ type ReleaseDetail = {
   notes?: string | null
   artifact_url: string
   artifact_sha256?: string | null
-  license_code?: LicenseCode | null
+  license_code?: string | null
   license_custom_text?: string | null
   license_url?: string | null
   created_at: string
@@ -293,28 +294,21 @@ export function Release() {
 
   const infoCard = (
     <div className="card release-meta release-section">
-      <div className="release-meta__header release-section__header">
-        <div>
-          <div className="heading release-meta__title">
-            {release ? `Release v${release.version}` : 'Release details'}
-          </div>
-          <div className="release-meta__project">
-            {projectName ? `Project · ${projectName}` : 'Loading project…'}
-          </div>
-        </div>
-        <div className="release-meta__actions release-section__actions">
+      <div className="release-header">
+        <h1 className="heading release-header__title">{release ? `Release v${release.version}` : 'Release details'}</h1>
+        <div className="release-header__spacer" />
+        <div className="release-header__actions">
           <MintStatusBadge />
-          <a className="status-config-link" href="/api/attest/config" target="_blank" rel="noreferrer">
-            Config
-          </a>
-          {release?.artifact_url ? (
-            <a className="release-meta__link" href={release.artifact_url} target="_blank" rel="noreferrer">
-              View artifact
-            </a>
+          {presentCtx?.present ? (
+            <button type="button" className="ghost" onClick={() => setTourOpen(true)}>Start Tour</button>
           ) : null}
         </div>
       </div>
-      <div className="provenance-detail-stack release-section__content">
+      <div className="provenance-detail-stack release-section__content" data-tour="published">
+        <div className="provenance-detail">
+          <span className="provenance-detail__label">Project</span>
+          <span className="provenance-detail__value">{projectName ? projectName : 'Loading project…'}</span>
+        </div>
         <div className="provenance-detail">
           <span className="provenance-detail__label">Published</span>
           <span className="provenance-detail__value">{release ? releaseCreatedAt : loadingRelease ? 'Loading…' : '—'}</span>
@@ -329,21 +323,15 @@ export function Release() {
           <span className="provenance-detail__label">Latest route</span>
           <span className="provenance-detail__value">
             {latestRouteHref ? (
-              <a className="provenance-link" href={latestRouteHref} target="_blank" rel="noreferrer">
-                {latestRouteLabel}
-              </a>
-            ) : (
-              'Not minted yet'
-            )}
+              <a className="provenance-link" href={latestRouteHref} target="_blank" rel="noreferrer">{latestRouteLabel}</a>
+            ) : ('Not minted yet')}
           </span>
         </div>
         <div className="provenance-detail">
           <span className="provenance-detail__label">Artifact</span>
           {release?.artifact_url ? (
             <div className="provenance-detail__value provenance-detail__value--split">
-              <a className="provenance-link" href={release.artifact_url} target="_blank" rel="noreferrer">
-                Open artifact
-              </a>
+              <a className="provenance-link" href={release.artifact_url} target="_blank" rel="noreferrer">Open artifact</a>
               <CopyButton text={release.artifact_url} />
             </div>
           ) : (
@@ -358,71 +346,21 @@ export function Release() {
   )
 
   const licenseCard = (
-    <div className="card release-section">
-      <div className="release-section__header">
-        <div className="heading release-section__title">License</div>
-        {release?.license_code ? <LicenseBadge code={release.license_code as LicenseCode} /> : <span className="muted">Not provided</span>}
-      </div>
-      <div className="release-section__content">
-        {release?.license_code ? (
-          <>
-            {release.license_code === 'CUSTOM' && release.license_custom_text ? (
-              <p className="release-section__note">Custom terms provided for this release.</p>
-            ) : null}
-            {release.license_url ? (
-              <a className="provenance-link" href={release.license_url} target="_blank" rel="noreferrer">
-                View license terms
-              </a>
-            ) : null}
-            {!release.license_custom_text && !release.license_url && release.license_code !== 'CUSTOM' ? (
-              <p className="release-section__note muted">License code recorded without external terms.</p>
-            ) : null}
-            {release.license_custom_text ? (
-              <pre className="release-section__license-text">{release.license_custom_text}</pre>
-            ) : null}
-          </>
-        ) : (
-          <p className="release-section__note muted">No license provided for this release.</p>
-        )}
-      </div>
-    </div>
+    <LicenseSection
+      releaseId={release?.id || null}
+      initialCode={release?.license_code as any}
+      initialCustomText={release?.license_custom_text || undefined}
+      url={release?.license_url || undefined}
+      onToast={toast.push}
+    />
   )
 
   const evidenceCard = (
-    <div className="card release-section" data-tour="evidence">
-      <div className="release-section__header">
-        <div className="heading release-section__title">Evidence</div>
-      </div>
-      <div className="release-section__content">
-        <div className="provenance-detail">
-          <span className="provenance-detail__label">Download</span>
-          {evidenceDownloadHref ? (
-            <div className="provenance-detail__value provenance-detail__value--split">
-              <a className="provenance-link" href={evidenceDownloadHref} target="_blank" rel="noreferrer">
-                Evidence package
-              </a>
-              {evidenceCopyTarget ? <CopyButton text={evidenceCopyTarget} /> : null}
-            </div>
-          ) : (
-            <span className="provenance-detail__value">Unavailable</span>
-          )}
-        </div>
-        <div className="provenance-detail">
-          <span className="provenance-detail__label">IPFS</span>
-          {evidenceIpfsUri && evidenceIpfsGateway ? (
-            <div className="provenance-detail__value provenance-detail__value--split">
-              <a className="provenance-link" href={evidenceIpfsGateway} target="_blank" rel="noreferrer">
-                {evidenceIpfsUri}
-              </a>
-              <CopyButton text={evidenceIpfsUri} />
-            </div>
-          ) : (
-            <span className="provenance-detail__value muted">Not published to IPFS yet.</span>
-          )}
-        </div>
-      </div>
-      <p className="release-section__note muted">Keep handy when recording Present Mode walkthroughs.</p>
-    </div>
+    <EvidenceSection
+      downloadHref={evidenceDownloadHref}
+      copyHref={evidenceCopyTarget}
+      ipfsCid={evidenceIpfsCid}
+    />
   )
 
   const filingOpen = modal?.kind === 'copyright'
@@ -448,58 +386,19 @@ export function Release() {
 
   return (
     <div className="container provenance-container">
-      <div data-tour="published">{infoCard}</div>
+      {infoCard}
+      <PublishSection release={release ? { id: release.id, version: release.version, artifact_url: release.artifact_url, artifact_sha256: release.artifact_sha256 } : undefined} onToast={toast.push} />
       {licenseCard}
       {evidenceCard}
-
-      <div className="card provenance-card">
-        <div className="provenance-card__header">
-          <div>
-            <div className="heading provenance-heading">Attest &amp; provenance tools</div>
-            <p className="muted provenance-subheading">
-              Generate proofs, mint NFTs, and prep filings directly from this release. Demo mode returns instant mock results.
-            </p>
-          </div>
-          {demoMode && <DemoBadge />}
-        </div>
-
-        <div className="provenance-actions" data-tour="attest">
-          <AttestActions
-            releaseId={releaseId}
-            disabled={!release || loadingRelease}
-            onToast={toast.push}
-            metadataFields={attestMetadata ?? undefined}
-            onAttestModal={handleAttestModal}
-          />
-          {actions.map(action => (
-            <div
-              key={action.key}
-              className="provenance-action"
-              data-tour={action.key === 'filing' ? 'filing' : undefined}
-            >
-              <div className="provenance-action__text">
-                <div className="provenance-action__title">{action.title}</div>
-                <p className="provenance-action__desc">{action.description}</p>
-              </div>
-              <button
-                className="primary"
-                type="button"
-                onClick={action.onClick}
-                disabled={!release || loadingRelease}
-              >
-                {action.cta}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {loadingRelease && (
-          <div className="provenance-hint">
-            <Spinner /> Loading release…
-          </div>
-        )}
-        {releaseError && <div className="provenance-hint provenance-hint--error">Error: {releaseError}</div>}
-      </div>
+      <AttestSection
+        releaseId={releaseId}
+        demoMode={demoMode}
+        disabled={!release || loadingRelease}
+        metadataFields={attestMetadata ?? undefined}
+        onToast={toast.push}
+        onAttestModal={handleAttestModal}
+      />
+      <PublicShareSection releaseId={release?.id} projectId={release?.project?.id} />
 
       <ProvenanceModal
         open={Boolean(filingOpen)}
@@ -643,16 +542,7 @@ export function Release() {
         />
       ) : null}
 
-      {presentCtx?.present && !tourOpen ? (
-        <button
-          type="button"
-          className="primary"
-          style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 10000 }}
-          onClick={() => setTourOpen(true)}
-        >
-          Start tour
-        </button>
-      ) : null}
+      {/* Floating start removed; wired to title row action */}
     </div>
   )
 }
