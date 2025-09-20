@@ -13,7 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/app/dashboard', label: 'Dashboard', icon: '📊' },
   { href: '/app/projects', label: 'Projects', icon: '📁' },
   { href: '/app/releases', label: 'Releases', icon: '🚀' },
-  { href: '/app/webhooks', label: 'Webhooks', icon: '🔗' },
+  { href: '/app/settings/webhooks', label: 'Webhooks', icon: '🔗' },
   { href: '/app/settings', label: 'Settings', icon: '⚙️' },
 ]
 
