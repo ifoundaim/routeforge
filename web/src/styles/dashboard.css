@@ -1,0 +1,6 @@
+.dashboard__cards { gap: 12px; }
+.dashboard__card { flex: 1 1 220px; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.dashboard__card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dashboard__card-title { color: var(--muted); font-size: 13px; }
+.dashboard__card-value { font-size: 24px; font-weight: 700; }
+

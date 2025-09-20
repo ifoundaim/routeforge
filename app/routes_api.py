@@ -264,6 +264,41 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
     return new_route
 
 
+@router.get("/routes")
+def get_route_by_slug(slug: Optional[str] = None, request: Request = None, db: Session = Depends(get_db)):
+    """Lookup a route by slug for the current user.
+
+    Frontend uses this to resolve `id` and target when navigating by slug.
+    Returns minimal fields to avoid over-fetching.
+    """
+    session_user, failure = _require_user(request, db)
+    if failure is not None:
+        return failure
+    current_user_id, failure = _require_user_id(request, session_user)
+    if failure is not None:
+        return failure
+
+    if not slug or not isinstance(slug, str):
+        return error(request, "invalid_slug", status_code=422, detail="Missing or invalid slug.")
+
+    sanitized = slugify(slug.strip())
+    route = (
+        db.execute(
+            select(models.Route)
+            .where(models.Route.slug == sanitized, models.Route.user_id == current_user_id)
+            .limit(1)
+        ).scalar_one_or_none()
+    )
+    if route is None:
+        return error(request, "not_found", status_code=404)
+
+    return {
+        "id": int(route.id),
+        "slug": route.slug,
+        "target_url": route.target_url,
+    }
+
+
 # Async heavy task: apply artifact hash when artifacts are large
 _HASH_SIZE_THRESHOLD = int(os.getenv("HASH_ASYNC_SIZE_BYTES", "104857600") or "104857600")  # 100 MB default
 

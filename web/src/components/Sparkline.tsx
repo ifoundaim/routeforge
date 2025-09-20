@@ -195,7 +195,7 @@ export function Sparkline({
       className={className}
       role="img"
       aria-label={ariaLabel || 'Sparkline'}
-      style={{ display: 'block' }}
+      style={{ display: 'block', width, height }}
     />
   )
 }
