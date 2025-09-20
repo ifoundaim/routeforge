@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { Header } from '../components/Header'
 import { apiGet, apiPost } from '../lib/api'
 import '../styles/webhooks.css'
 
@@ -10,6 +9,9 @@ type Webhook = {
   event: 'release_published' | 'route_hit' | string
   active: boolean
   secret: string
+  last_delivery_status?: number | null
+  last_delivery_ts?: string | null
+  last_payload_preview?: string | null
 }
 
 type TestResult = {
@@ -38,7 +40,7 @@ export function SettingsWebhooks() {
   const [creating, setCreating] = useState(false)
   const [createUrl, setCreateUrl] = useState('')
   const [createSecret, setCreateSecret] = useState('')
-  const [createEvent, setCreateEvent] = useState<'release_published' | 'route_hit'>('release_published')
+  const [createEvents, setCreateEvents] = useState<Array<'release_published' | 'route_hit'>>(['release_published'])
   const [testing, setTesting] = useState<number | null>(null)
   const [lastResult, setLastResult] = useState<TestResult | null>(null)
 
@@ -70,8 +72,8 @@ export function SettingsWebhooks() {
     const u = (createUrl || '').trim()
     if (!u) return false
     try { new URL(u) } catch { return false }
-    return true
-  }, [createUrl])
+    return (createEvents && createEvents.length > 0)
+  }, [createUrl, createEvents])
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -79,12 +81,17 @@ export function SettingsWebhooks() {
     setCreating(true)
     setError(null)
     try {
-      const payload = { url: createUrl.trim(), event: createEvent, ...(createSecret.trim() ? { secret: createSecret.trim() } : {}) }
-      const created = await apiPost<typeof payload, Webhook>('/api/webhooks', payload)
-      setItems(prev => [created, ...prev])
+      const url = createUrl.trim()
+      const secret = createSecret.trim()
+      const createdMany = await Promise.all(createEvents.map(async (ev) => {
+        const payload = { url, event: ev, ...(secret ? { secret } : {}) }
+        const created = await apiPost<typeof payload, Webhook>('/api/webhooks', payload)
+        return created
+      }))
+      setItems(prev => [...createdMany, ...prev])
       setCreateUrl('')
       setCreateSecret('')
-      setCreateEvent('release_published')
+      setCreateEvents(['release_published'])
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create webhook.'
       setError(message)
@@ -115,6 +122,8 @@ export function SettingsWebhooks() {
         throw new Error((data && (data as any).error) || `${res.status}`)
       }
       setLastResult(data)
+      // Refresh items so last delivery info updates
+      await load()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Test delivery failed.'
       setError(message)
@@ -124,9 +133,7 @@ export function SettingsWebhooks() {
   }
 
   return (
-    <div className="container">
-      <Header />
-      <main className="webhooks" id="main">
+    <main className="webhooks" id="main">
         <div className="heading" style={{ margin: '0 0 12px' }}>Webhooks</div>
         <div className="webhooks-grid">
           <section className="card webhooks-form">
@@ -158,8 +165,13 @@ export function SettingsWebhooks() {
                 </div>
               </label>
               <label className="field">
-                <span>Event</span>
-                <select value={createEvent} onChange={e => setCreateEvent(e.target.value as any)}>
+                <span>Events</span>
+                <select
+                  multiple
+                  value={createEvents}
+                  onChange={e => setCreateEvents(Array.from(e.target.selectedOptions).map(o => o.value as any))}
+                  size={2}
+                >
                   <option value="release_published">release_published</option>
                   <option value="route_hit">route_hit</option>
                 </select>
@@ -194,12 +206,24 @@ export function SettingsWebhooks() {
                         <span className="badge">{w.event}</span>
                         <span className="dot" aria-hidden>•</span>
                         <span className={w.active ? 'ok' : 'muted'}>{w.active ? 'Active' : 'Inactive'}</span>
+                        {w.last_delivery_ts ? (
+                          <>
+                            <span className="dot" aria-hidden>•</span>
+                            <span title={w.last_delivery_ts}>Last: {w.last_delivery_status || '—'} @ {w.last_delivery_ts}</span>
+                          </>
+                        ) : null}
                       </div>
                       <div className="webhooks-item__secret">
                         <span className="muted">Secret</span>
                         <code>{w.secret}</code>
                         <button className="ghost" type="button" onClick={() => void copy(w.secret)}>Copy</button>
                       </div>
+                      {w.last_payload_preview ? (
+                        <div className="webhooks-item__preview">
+                          <span className="muted">Payload</span>
+                          <code className="truncate">{w.last_payload_preview}</code>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="webhooks-item__actions">
                       <button type="button" onClick={() => void onTest(w.id)} disabled={testing === w.id}>{testing === w.id ? 'Sending…' : 'Send test'}</button>
@@ -233,8 +257,7 @@ export function SettingsWebhooks() {
             </div>
           </section>
         </div>
-      </main>
-    </div>
+    </main>
   )
 }
 

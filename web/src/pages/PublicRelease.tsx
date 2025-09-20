@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { LicenseBadge, type LicenseCode } from '../components/LicenseStep'
 import { apiGet } from '../lib/api'
 import { useShareMeta } from '../lib/shareMeta'
-import '../styles/public-share.css'
+import '../styles/public.css'
 import '../styles/license.css'
 
 const KNOWN_LICENSES: readonly LicenseCode[] = ['MIT', 'Apache-2.0', 'CC-BY-4.0', 'CUSTOM'] as const
@@ -28,6 +28,7 @@ type PublicRelease = {
   version: string
   notes?: string | null
   artifact_url: string
+  evidence_ipfs_cid?: string | null
   license_code?: string | null
   license_custom_text?: string | null
   license_url?: string | null
@@ -166,6 +167,8 @@ export function PublicRelease() {
 
   const routeSlug = release?.latest_route?.slug || null
   const routeHref = routeSlug ? `/r/${routeSlug}` : null
+  const evidenceIpfsCid = release?.evidence_ipfs_cid?.trim() || null
+  const evidenceIpfsUri = evidenceIpfsCid ? `ipfs://${evidenceIpfsCid}` : null
   const evidenceHref = release ? `/public/releases/${release.id}/evidence.zip` : undefined
 
   return (
@@ -214,27 +217,18 @@ export function PublicRelease() {
                 </p>
 
                 <div className="public-actions">
-                  {evidenceHref ? (
-                    <a
-                      className="public-button public-button--primary"
-                      href={evidenceHref}
-                      download
-                      data-cta="download-evidence"
-                    >
-                      Download evidence
+                  {routeHref ? (
+                    <a className="public-button public-button--primary" href={routeHref} target="_blank" rel="noreferrer">
+                      Open route
                     </a>
                   ) : null}
-                  <a
-                    className="public-button public-button--secondary"
-                    href={release.artifact_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    View artifact
-                  </a>
-                  {routeHref ? (
-                    <a className="public-button public-button--secondary" href={routeHref} target="_blank" rel="noreferrer">
-                      Visit route
+                  {evidenceIpfsUri ? (
+                    <a className="public-button public-button--secondary" href={evidenceIpfsUri} target="_blank" rel="noreferrer">
+                      Evidence (IPFS)
+                    </a>
+                  ) : evidenceHref ? (
+                    <a className="public-button public-button--secondary" href={evidenceHref} download data-cta="download-evidence">
+                      Download evidence
                     </a>
                   ) : null}
                 </div>

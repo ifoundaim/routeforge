@@ -1,117 +1,202 @@
+/* Design Tokens for RouteForge UI */
+
+/* === SPACING === */
 :root {
-  color-scheme: dark;
-  /* Typography */
-  --font-family-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
-  --font-size-base: 1rem;
-  --font-size-sm: 0.875rem;
-  --font-size-lg: 1.125rem;
-  --line-height-base: 1.6;
-  --font-scale: 1;
-
-  /* Spacing scale */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-
-  /* Border radii */
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-pill: 999px;
-
-  /* Shadows */
-  --shadow-card: 0 16px 40px rgba(15, 23, 42, 0.45);
-  --shadow-card-strong: 0 24px 64px rgba(15, 23, 42, 0.55);
-
-  /* Color palette */
-  --color-brand: #4F46E5;
-  --color-brand-strong: #4338CA;
-  --color-brand-soft: rgba(79, 70, 229, 0.12);
-  --color-success: #22C55E;
-  --color-warn: #F59E0B;
-  --color-danger: #EF4444;
-
-  --color-bg: #0b0f17;
-  --color-surface: #121826;
-  --color-surface-soft: #1b2335;
-  --color-border: #1f2937;
-  --color-border-soft: rgba(148, 163, 184, 0.12);
-  --color-text: #f8fafc;
-  --color-text-strong: #ffffff;
-  --color-text-muted: #94a3b8;
-
-  /* Legacy tokens (bridge existing styles) */
-  --bg: var(--color-bg);
-  --panel: var(--color-surface);
-  --muted: var(--color-text-muted);
-  --text: var(--color-text);
-  --accent: var(--color-brand);
-  --error: var(--color-danger);
-  --ok: var(--color-success);
+  /* Base spacing scale */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+  --space-20: 5rem;    /* 80px */
+  
+  /* Layout gaps */
+  --gap-xs: var(--space-2);
+  --gap-sm: var(--space-3);
+  --gap-md: var(--space-4);
+  --gap-lg: var(--space-6);
+  --gap-xl: var(--space-8);
+  
+  /* Component spacing */
+  --sidebar-width: 16rem;     /* 256px */
+  --sidebar-width-collapsed: 4rem;  /* 64px */
+  --header-height: 4rem;      /* 64px */
+  --border-radius: 0.5rem;    /* 8px */
+  --border-radius-sm: 0.375rem;  /* 6px */
+  --border-radius-lg: 0.75rem;   /* 12px */
 }
 
-:root[data-theme="light"],
-:root[data-theme="light"] body {
-  color-scheme: light;
+/* === COLORS - LIGHT MODE === */
+:root {
+  /* Background colors */
   --color-bg: #f9fafb;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f1f5f9;
-  --color-border: #d0d6e1;
-  --color-border-soft: rgba(15, 23, 42, 0.08);
-  --color-text: #0f172a;
-  --color-text-strong: #0b1120;
-  --color-text-muted: #475569;
-
-  --bg: var(--color-bg);
-  --panel: var(--color-surface);
-  --muted: var(--color-text-muted);
-  --text: var(--color-text);
-  --accent: var(--color-brand);
-  --error: var(--color-danger);
-  --ok: var(--color-success);
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f3f4f6;
+  --color-bg-muted: #f9fafb;
+  
+  /* Text colors */
+  --color-text: #111827;
+  --color-text-strong: #000000;
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #9ca3af;
+  
+  /* Border colors */
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-border-subtle: #f3f4f6;
+  
+  /* Accent colors */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-subtle: #eff6ff;
+  
+  /* Status colors */
+  --color-success: #15803d;
+  --color-success-bg: #f0fdf4;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  
+  /* Interactive colors */
+  --color-button-primary: var(--color-accent);
+  --color-button-primary-hover: var(--color-accent-hover);
+  --color-button-secondary: var(--color-text);
+  --color-button-secondary-hover: var(--color-text-strong);
+  --color-button-ghost: transparent;
+  --color-button-ghost-hover: var(--color-bg-subtle);
 }
 
-:root[data-theme="dark"],
-:root[data-theme="dark"] body {
-  color-scheme: dark;
+/* === COLORS - DARK MODE === */
+:root[data-theme="dark"] {
+  /* Background colors */
   --color-bg: #0b0f17;
-  --color-surface: #121826;
-  --color-surface-soft: #1b2335;
-  --color-border: #1f2937;
-  --color-border-soft: rgba(148, 163, 184, 0.12);
-  --color-text: #f8fafc;
+  --color-bg-elevated: #121826;
+  --color-bg-subtle: #1f2937;
+  --color-bg-muted: #0b0f17;
+  
+  /* Text colors */
+  --color-text: #e5e7eb;
   --color-text-strong: #ffffff;
-  --color-text-muted: #94a3b8;
-
-  --bg: var(--color-bg);
-  --panel: var(--color-surface);
-  --muted: var(--color-text-muted);
-  --text: var(--color-text);
-  --accent: var(--color-brand);
-  --error: var(--color-danger);
-  --ok: var(--color-success);
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #9ca3af;
+  
+  /* Border colors */
+  --color-border: #374151;
+  --color-border-strong: #4b5563;
+  --color-border-subtle: #1f2937;
+  
+  /* Accent colors */
+  --color-accent: #60a5fa;
+  --color-accent-hover: #3b82f6;
+  --color-accent-subtle: #1e3a8a;
+  
+  /* Status colors */
+  --color-success: #22c55e;
+  --color-success-bg: #064e3b;
+  --color-error: #ef4444;
+  --color-error-bg: #7f1d1d;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #78350f;
+  
+  /* Interactive colors */
+  --color-button-primary: var(--color-accent);
+  --color-button-primary-hover: var(--color-accent-hover);
+  --color-button-secondary: var(--color-text);
+  --color-button-secondary-hover: var(--color-text-strong);
+  --color-button-ghost: transparent;
+  --color-button-ghost-hover: var(--color-bg-subtle);
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --color-bg: #f9fafb;
-    --color-surface: #ffffff;
-    --color-surface-soft: #f1f5f9;
-    --color-border: #d0d6e1;
-    --color-border-soft: rgba(15, 23, 42, 0.08);
-    --color-text: #0f172a;
-    --color-text-strong: #0b1120;
-    --color-text-muted: #475569;
-
-    --bg: var(--color-bg);
-    --panel: var(--color-surface);
-    --muted: var(--color-text-muted);
-    --text: var(--color-text);
-    --accent: var(--color-brand);
-    --error: var(--color-danger);
-    --ok: var(--color-success);
+/* === SYSTEM PREFERENCE FALLBACK === */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Background colors */
+    --color-bg: #0b0f17;
+    --color-bg-elevated: #121826;
+    --color-bg-subtle: #1f2937;
+    --color-bg-muted: #0b0f17;
+    
+    /* Text colors */
+    --color-text: #e5e7eb;
+    --color-text-strong: #ffffff;
+    --color-text-muted: #6b7280;
+    --color-text-subtle: #9ca3af;
+    
+    /* Border colors */
+    --color-border: #374151;
+    --color-border-strong: #4b5563;
+    --color-border-subtle: #1f2937;
+    
+    /* Accent colors */
+    --color-accent: #60a5fa;
+    --color-accent-hover: #3b82f6;
+    --color-accent-subtle: #1e3a8a;
+    
+    /* Status colors */
+    --color-success: #22c55e;
+    --color-success-bg: #064e3b;
+    --color-error: #ef4444;
+    --color-error-bg: #7f1d1d;
+    --color-warning: #f59e0b;
+    --color-warning-bg: #78350f;
+    
+    /* Interactive colors */
+    --color-button-primary: var(--color-accent);
+    --color-button-primary-hover: var(--color-accent-hover);
+    --color-button-secondary: var(--color-text);
+    --color-button-secondary-hover: var(--color-text-strong);
+    --color-button-ghost: transparent;
+    --color-button-ghost-hover: var(--color-bg-subtle);
   }
+}
+
+/* === PRESENT MODE TOKENS === */
+:root.present {
+  /* Increased font sizes */
+  --font-size-base: 1.125rem;     /* 18px (was 16px) */
+  --font-size-sm: 1rem;           /* 16px (was 14px) */
+  --font-size-lg: 1.25rem;        /* 20px (was 18px) */
+  --font-size-xl: 1.5rem;         /* 24px (was 20px) */
+  --font-size-2xl: 2rem;          /* 32px (was 24px) */
+  
+  /* Tighter spacing for density */
+  --space-present: 0.75;          /* 75% of normal spacing */
+  --gap-present: 0.8;             /* 80% of normal gap */
+  
+  /* Adjusted component sizes */
+  --header-height: 3rem;          /* 48px (was 64px) */
+  --sidebar-width: 14rem;         /* 224px (was 256px) */
+}
+
+/* === COMPONENT TOKENS === */
+:root {
+  /* Cards */
+  --card-bg: var(--color-bg-elevated);
+  --card-border: var(--color-border);
+  --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --card-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Focus rings */
+  --focus-ring: 0 0 0 2px var(--color-accent);
+  --focus-ring-offset: 1px;
+  
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* === RESPONSIVE BREAKPOINTS === */
+:root {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
 }

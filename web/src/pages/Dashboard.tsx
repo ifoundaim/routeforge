@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Header } from '../components/Header'
 import { Sparkline, buildSparklineSeries } from '../components/Sparkline'
+import { UTMChips, UTMSource } from '../components/UTMChips'
+import { ToastShelf, useToastQueue } from '../components/Toast'
 import { apiGet } from '../lib/api'
 import { useSession } from '../lib/session'
+import '../styles/dashboard.css'
 
 type TopRoute = {
   route_id: number
@@ -35,6 +37,12 @@ type RouteStatsState = {
   error: string | null
 }
 
+type StatsSeries = {
+  by_day_clicks: RouteDailyCount[]
+  by_day_active_routes: RouteDailyCount[]
+  utm_sources: UTMSource[]
+}
+
 function formatNumber(value: number | null | undefined): string {
   if (!Number.isFinite(value || 0)) return '—'
   return (value || 0).toLocaleString()
@@ -46,6 +54,11 @@ export function Dashboard() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [routeStats, setRouteStats] = useState<Record<number, RouteStatsState>>({})
+  const [series, setSeries] = useState<StatsSeries | null>(null)
+  const [seriesLoading, setSeriesLoading] = useState(false)
+  const [seriesError, setSeriesError] = useState<string | null>(null)
+  const [activeUTM, setActiveUTM] = useState<string | null>(null)
+  const { items: toastItems, push: pushToast, remove: removeToast } = useToastQueue()
 
   useEffect(() => {
     const previousTitle = document.title
@@ -60,6 +73,10 @@ export function Dashboard() {
       setSummary(null)
       setSummaryError(null)
       setSummaryLoading(false)
+      setSeries(null)
+      setSeriesError(null)
+      setSeriesLoading(false)
+      setActiveUTM(null)
       return
     }
 
@@ -79,6 +96,23 @@ export function Dashboard() {
       })
       .finally(() => {
         if (alive) setSummaryLoading(false)
+      })
+
+    setSeriesLoading(true)
+    setSeriesError(null)
+    apiGet<StatsSeries>('/api/stats/series?days=7')
+      .then(data => {
+        if (!alive) return
+        setSeries(data)
+      })
+      .catch(error => {
+        if (!alive) return
+        const message = error instanceof Error ? error.message : 'Failed to load series.'
+        setSeries(null)
+        setSeriesError(message)
+      })
+      .finally(() => {
+        if (alive) setSeriesLoading(false)
       })
 
     return () => {
@@ -127,6 +161,38 @@ export function Dashboard() {
 
   const topRoutes = useMemo(() => summary?.top_routes || [], [summary])
 
+  const allRouteStatsSettled = useMemo(() => {
+    if (!topRoutes.length) return true
+    return topRoutes.every(r => {
+      const s = routeStats[r.route_id]
+      return Boolean(s && !s.loading)
+    })
+  }, [topRoutes, routeStats])
+
+  const filteredRoutes = useMemo(() => {
+    if (!activeUTM) return topRoutes
+    const want = activeUTM.toLowerCase()
+    const core = new Set(['twitter', 'newsletter', 'reddit'])
+    return topRoutes.filter(route => {
+      const s = routeStats[route.route_id]
+      if (!s || !s.data) return false
+      const sources = (s.data.utm_top_sources || []).map(x => (x?.source || '').toLowerCase())
+      if (want === 'other') {
+        return sources.some(src => src && !core.has(src))
+      }
+      return sources.includes(want)
+    })
+  }, [activeUTM, topRoutes, routeStats])
+
+  useEffect(() => {
+    if (!activeUTM) return
+    if (!summary || !topRoutes.length) return
+    if (!allRouteStatsSettled) return
+    if (filteredRoutes.length === 0) {
+      pushToast(`No routes for UTM "${activeUTM}" in the last 7 days.`, 'error')
+    }
+  }, [activeUTM, allRouteStatsSettled, filteredRoutes.length, pushToast, summary, topRoutes.length])
+
   const renderTopRoutes = () => {
     if (summaryLoading) {
       return (
@@ -158,13 +224,34 @@ export function Dashboard() {
       return (
         <div className="card" style={{ padding: 16 }}>
           <p className="muted" style={{ margin: 0 }}>No routes have recorded clicks in the last 7 days.</p>
+          <p className="muted" style={{ margin: '8px 0 0' }}>Hint: open one of your routes with <span className="kbd">?utm_source=twitter</span> to start tracking.</p>
+        </div>
+      )
+    }
+
+    const list = activeUTM ? filteredRoutes : topRoutes
+
+    if (activeUTM && !allRouteStatsSettled && list.length === 0) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="card" style={{ padding: 12, display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ width: 140, height: 12, borderRadius: 4, background: 'rgba(107,114,128,0.25)' }} />
+                <div style={{ width: 90, height: 10, borderRadius: 4, background: 'rgba(107,114,128,0.2)', marginTop: 8 }} />
+              </div>
+              <div>
+                <Sparkline data={[]} loading width={120} height={32} />
+              </div>
+            </div>
+          ))}
         </div>
       )
     }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {topRoutes.map(route => {
+        {list.map(route => {
           const stats = routeStats[route.route_id]
           const sparkData = stats?.data ? buildSparklineSeries(stats.data.by_day, 7) : []
           const link = route.slug ? `/app/routes/${route.slug}` : `/app/routes/id/${route.route_id}`
@@ -236,41 +323,70 @@ export function Dashboard() {
   const uniqueRoutes = formatNumber(summary?.unique_routes)
   const topRouteClicks = formatNumber(topRoutes.length ? topRoutes[0].clicks : null)
 
+  const clicksSeries = useMemo(() => buildSparklineSeries(series?.by_day_clicks || [], 7), [series])
+  const activeRoutesSeries = useMemo(() => buildSparklineSeries(series?.by_day_active_routes || [], 7), [series])
+  const topRouteSparkSeries = useMemo(() => {
+    if (!topRoutes.length) return [] as ReturnType<typeof buildSparklineSeries>
+    const s = routeStats[topRoutes[0].route_id]
+    return buildSparklineSeries(s?.data?.by_day || [], 7)
+  }, [routeStats, topRoutes])
+
   const isAuthenticated = status === 'authenticated'
 
   return (
-    <div className="container">
-      <Header />
-      <main style={{ display: 'flex', flexDirection: 'column', gap: 'var(--layout-gap)' }}>
-        <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="heading" style={{ marginBottom: 0 }}>7 day traction</div>
-          {!isAuthenticated ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <section>
+        <div className="heading" style={{ margin: '0 0 12px' }}>7 day traction</div>
+        {!isAuthenticated ? (
+          <div className="card" style={{ padding: 16 }}>
             <p className="muted" style={{ margin: 0 }}>
               Sign in to view dashboard analytics.
             </p>
-          ) : (
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 140px', background: 'rgba(37,99,235,0.12)', borderRadius: 10, padding: 16 }}>
-                <div style={{ color: 'var(--muted)', fontSize: 13 }}>Clicks</div>
-                <div style={{ fontSize: 28, fontWeight: 700 }}>{summaryLoading ? '…' : totalClicks}</div>
+          </div>
+        ) : (
+          <div className="row dashboard__cards">
+            <div className="card dashboard__card">
+              <div className="dashboard__card-head">
+                <div className="dashboard__card-title">Clicks</div>
+                <div className="dashboard__card-value">{summaryLoading ? '…' : totalClicks}</div>
               </div>
-              <div style={{ flex: '1 1 140px', background: 'rgba(17,24,39,0.25)', borderRadius: 10, padding: 16 }}>
-                <div style={{ color: 'var(--muted)', fontSize: 13 }}>Active routes</div>
-                <div style={{ fontSize: 28, fontWeight: 700 }}>{summaryLoading ? '…' : uniqueRoutes}</div>
-              </div>
-              <div style={{ flex: '1 1 140px', background: 'rgba(34,197,94,0.12)', borderRadius: 10, padding: 16 }}>
-                <div style={{ color: 'var(--muted)', fontSize: 13 }}>Top route hits</div>
-                <div style={{ fontSize: 28, fontWeight: 700 }}>{summaryLoading ? '…' : topRouteClicks}</div>
-              </div>
+              <Sparkline data={clicksSeries} loading={seriesLoading} width={160} height={40} ariaLabel="7-day clicks trend" />
             </div>
-          )}
-        </section>
+            <div className="card dashboard__card">
+              <div className="dashboard__card-head">
+                <div className="dashboard__card-title">Active routes</div>
+                <div className="dashboard__card-value">{summaryLoading ? '…' : uniqueRoutes}</div>
+              </div>
+              <Sparkline data={activeRoutesSeries} loading={seriesLoading} width={160} height={40} ariaLabel="7-day active routes trend" />
+            </div>
+            <div className="card dashboard__card">
+              <div className="dashboard__card-head">
+                <div className="dashboard__card-title">Top route hits</div>
+                <div className="dashboard__card-value">{summaryLoading ? '…' : topRouteClicks}</div>
+              </div>
+              <Sparkline data={topRouteSparkSeries} loading={Boolean(topRoutes.length && routeStats[topRoutes[0].route_id]?.loading)} width={160} height={40} ariaLabel="7-day top route trend" />
+            </div>
+          </div>
+        )}
+      </section>
 
-        <section>
-          <div className="heading" style={{ margin: '0 0 12px' }}>Top routes</div>
-          {renderTopRoutes()}
-        </section>
-      </main>
+      <section>
+        <div className="heading" style={{ margin: '0 0 8px' }}>Top routes</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '0 0 12px' }}>
+          <div className="muted" style={{ fontSize: 13 }}>Filter by UTM source</div>
+          <UTMChips
+            sources={series?.utm_sources || []}
+            loading={seriesLoading}
+            limit={4}
+            activeSource={activeUTM}
+            onSelect={setActiveUTM}
+            emptyLabel={seriesError ? `Unable to load UTM sources.` : 'No tracked UTM sources yet.'}
+          />
+        </div>
+        {renderTopRoutes()}
+      </section>
+
+      <ToastShelf items={toastItems} onDismiss={removeToast} />
     </div>
   )
 }

@@ -33,6 +33,9 @@ class WebhookOut(BaseModel):
     event: str
     active: bool
     secret: str
+    last_delivery_status: Optional[int] = None
+    last_delivery_ts: Optional[str] = None
+    last_payload_preview: Optional[str] = None
 
 
 def _error(request: Request, code: str, status: int = 400):
@@ -63,6 +66,9 @@ def list_webhooks(request: Request, db: Session = Depends(get_db)):
             event=r.event,
             active=bool(int(r.active or 0)),
             secret=r.secret,
+            last_delivery_status=r.last_delivery_status,
+            last_delivery_ts=r.last_delivery_ts.isoformat() if r.last_delivery_ts else None,
+            last_payload_preview=r.last_payload_preview,
         )
         for r in rows
     ]
@@ -80,7 +86,16 @@ def create_webhook(payload: WebhookCreate, request: Request, db: Session = Depen
     db.add(row)
     db.commit()
     db.refresh(row)
-    return WebhookOut(id=row.id, url=row.url, event=row.event, active=True, secret=row.secret)
+    return WebhookOut(
+        id=row.id,
+        url=row.url,
+        event=row.event,
+        active=True,
+        secret=row.secret,
+        last_delivery_status=row.last_delivery_status,
+        last_delivery_ts=row.last_delivery_ts.isoformat() if row.last_delivery_ts else None,
+        last_payload_preview=row.last_payload_preview,
+    )
 
 
 @router.post("/{webhook_id}/toggle")
@@ -155,10 +170,19 @@ def test_webhook(webhook_id: int, request: Request, db: Session = Depends(get_db
         status_code = 0
         ok = False
 
-    # Return result, including a truncated preview of the payload
+    # Return and persist result, including a truncated preview of the payload
     preview = json.dumps(payload)
     if len(preview) > 240:
         preview = preview[:240] + "…"
+
+    try:
+        row.last_delivery_status = status_code
+        row.last_delivery_ts = now
+        row.last_payload_preview = preview
+        db.add(row)
+        db.commit()
+    except Exception:
+        db.rollback()
 
     return {
         "ok": ok,

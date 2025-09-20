@@ -56,6 +56,7 @@ class PublicReleaseOut(BaseModel):
     version: str
     notes: Optional[str]
     artifact_url: str
+    evidence_ipfs_cid: Optional[str]
     license_code: Optional[str]
     license_custom_text: Optional[str]
     license_url: Optional[str]
@@ -143,6 +144,7 @@ def get_public_release(release_id: int, request: Request, db: Optional[Session] 
             version=release.version,
             notes=release.notes,
             artifact_url=release.artifact_url,
+            evidence_ipfs_cid=getattr(release, "evidence_ipfs_cid", None),
             license_code=release.license_code,
             license_custom_text=release.license_custom_text,
             license_url=license_info.url if license_info else None,

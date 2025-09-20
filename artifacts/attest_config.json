@@ -1,0 +1,19 @@
+{
+  "chain_id": 84532,
+  "chain_name": "Base Sepolia",
+  "rpc_url": "https://sepolia.base.org",
+  "contract": null,
+  "mint_function": "safeMint(address,string)",
+  "mint_inputs": [
+    "address",
+    "string"
+  ],
+  "abi": null,
+  "requires_wallet": true,
+  "mode": "demo",
+  "explorer_tx_base": "https://sepolia.basescan.org/tx",
+  "wallet_enabled": true,
+  "custodial_enabled": false,
+  "abi_fn": "safeMint(address,string)",
+  "base_rpc_url_set": false
+}

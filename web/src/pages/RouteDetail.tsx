@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import { Header } from '../components/Header'
 import { Sparkline, buildSparklineSeries } from '../components/Sparkline'
 import { UTMChips, type UTMSource } from '../components/UTMChips'
 import { ToastShelf, useToastQueue } from '../components/Toast'
 import { apiGet } from '../lib/api'
+import { OpenCta } from '../components/Route/OpenCta'
+import { Header } from '../components/Header'
 
 type RouteStats = {
   clicks: number
@@ -194,7 +195,7 @@ export function RouteDetail() {
     if (!routeId) return
     let alive = true
     setHits({ loading: true, error: null, data: null })
-    apiGet<{ hits: RouteHit[] }>(`/api/routes/${routeId}/hits/recent?limit=50`)
+    apiGet<{ hits: RouteHit[] }>(`/api/routes/${routeId}/hits/recent?limit=20`)
       .then(payload => {
         if (!alive) return
         const items = (payload.hits || []).map(hit => ({
@@ -306,8 +307,7 @@ export function RouteDetail() {
           <thead>
             <tr>
               <th>When</th>
-              <th>IP</th>
-              <th>Ref / UA</th>
+              <th>Referrer</th>
               <th>utm_source</th>
             </tr>
           </thead>
@@ -315,9 +315,8 @@ export function RouteDetail() {
             {items.map(hit => (
               <tr key={hit.id}>
                 <td>{formatRelativeTime(hit.ts)}</td>
-                <td>{hit.ip || '—'}</td>
-                <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {hit.ref || hit.ua || '—'}
+                <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {hit.ref || '—'}
                 </td>
                 <td>{hit.utm_source || '—'}</td>
               </tr>
@@ -341,12 +340,20 @@ export function RouteDetail() {
         <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="row" style={{ alignItems: 'center', gap: 12 }}>
             <div className="heading" style={{ margin: 0, flex: 1 }}>{title}</div>
-            {baseRouteUrl ? (
-              <a href={baseRouteUrl} target="_blank" rel="noreferrer">
-                <button type="button">Open link</button>
-              </a>
-            ) : null}
+            <OpenCta slug={resolvedSlug || undefined} utmSource="twitter" />
           </div>
+          {routeMeta?.target_url ? (
+            <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+              <span className="muted">Target</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{routeMeta.target_url}</span>
+              {baseRouteUrl ? (
+                <button type="button" className="ghost" onClick={async () => { try { await navigator.clipboard.writeText(baseRouteUrl) } catch {} }}>Copy</button>
+              ) : null}
+              {routeMeta.target_url ? (
+                <button type="button" className="ghost" onClick={async () => { try { await navigator.clipboard.writeText(routeMeta.target_url || '') } catch {} }}>Copy target</button>
+              ) : null}
+            </div>
+          ) : null}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ minWidth: 140 }}>
               <div style={{ color: 'var(--muted)', fontSize: 13 }}>7d clicks</div>
