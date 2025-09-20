@@ -1,0 +1,9 @@
+{
+  "tx_hash": "log-7-1e56913dd911defd",
+  "metadata_uri": "http://localhost:8000/api/releases/7/evidence.zip",
+  "token_id": null,
+  "mode": "demo",
+  "artifact_sha256": "unknown",
+  "license_code": "none",
+  "evidence_uri": "http://localhost:8000/api/releases/7/evidence.zip"
+}

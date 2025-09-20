@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Header } from '../components/Header'
 import { Sparkline, buildSparklineSeries } from '../components/Sparkline'
 import { apiGet } from '../lib/api'
 import { useSession } from '../lib/session'
@@ -239,11 +238,9 @@ export function Dashboard() {
   const isAuthenticated = status === 'authenticated'
 
   return (
-    <div className="container">
-      <Header />
-      <main style={{ display: 'flex', flexDirection: 'column', gap: 'var(--layout-gap)' }}>
-        <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="heading" style={{ marginBottom: 0 }}>7 day traction</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap-lg)' }}>
+      <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="heading" style={{ marginBottom: 0 }}>7 day traction</div>
           {!isAuthenticated ? (
             <p className="muted" style={{ margin: 0 }}>
               Sign in to view dashboard analytics.
@@ -269,8 +266,7 @@ export function Dashboard() {
         <section>
           <div className="heading" style={{ margin: '0 0 12px' }}>Top routes</div>
           {renderTopRoutes()}
-        </section>
-      </main>
+      </section>
     </div>
   )
 }

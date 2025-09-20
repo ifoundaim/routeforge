@@ -114,6 +114,113 @@ def get_stats_summary(request: Request, days: int = 7, db: Session = Depends(get
     }
 
 
+@router.get("/stats/series")
+def get_stats_series(request: Request, days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Return 7-day series for overall clicks and active routes, plus UTM source counts.
+
+    - by_day_clicks: total clicks per day over the window
+    - by_day_active_routes: number of distinct routes with clicks per day
+    - utm_sources: simplified counts for twitter/newsletter/reddit/other
+    """
+    user = _require_user(request, db)
+    if is_auth_enabled() and user is None:
+        return error("auth_required", status_code=401)
+
+    window_days = _normalize_days(days)
+    since = now_utc() - timedelta(days=window_days)
+    user_id = int(user.get("user_id")) if user else None
+
+    # Total clicks per day
+    clicks_rows = db.execute(
+        select(
+            func.date(models.RouteHit.ts).label("date"),
+            func.count(models.RouteHit.id).label("count"),
+        )
+        .join(models.Route, models.Route.id == models.RouteHit.route_id)
+        .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
+        .group_by(func.date(models.RouteHit.ts))
+        .order_by(func.date(models.RouteHit.ts).asc())
+    ).all()
+
+    by_day_clicks: List[Dict[str, Any]] = [
+        {"date": str(r.date), "count": int(r.count or 0)} for r in clicks_rows
+    ]
+
+    # Distinct active routes per day
+    active_rows = db.execute(
+        select(
+            func.date(models.RouteHit.ts).label("date"),
+            func.count(func.distinct(models.RouteHit.route_id)).label("count"),
+        )
+        .join(models.Route, models.Route.id == models.RouteHit.route_id)
+        .where(models.RouteHit.ts >= since, models.Route.user_id == user_id)
+        .group_by(func.date(models.RouteHit.ts))
+        .order_by(func.date(models.RouteHit.ts).asc())
+    ).all()
+
+    by_day_active_routes: List[Dict[str, Any]] = [
+        {"date": str(r.date), "count": int(r.count or 0)} for r in active_rows
+    ]
+
+    # Aggregate UTM sources across all hits for the user in the window
+    ref_rows = db.execute(
+        select(
+            models.RouteHit.ref.label("ref"),
+            func.count(models.RouteHit.id).label("count"),
+        )
+        .join(models.Route, models.Route.id == models.RouteHit.route_id)
+        .where(
+            models.RouteHit.ts >= since,
+            models.Route.user_id == user_id,
+            models.RouteHit.ref.isnot(None),
+            models.RouteHit.ref != "",
+        )
+        .group_by(models.RouteHit.ref)
+        .order_by(desc("count"))
+        .limit(1000)
+    ).all()
+
+    raw_utm_counts: Dict[str, int] = {}
+    for r in ref_rows:
+        cleaned_ref = _coerce_ref(getattr(r, "ref", None))
+        if not cleaned_ref:
+            continue
+        try:
+            decoded = decode_ref(cleaned_ref)
+        except Exception:  # pragma: no cover - defensive
+            logger.debug("Unable to decode ref value: %s", cleaned_ref, exc_info=True)
+            continue
+
+        utm_payload = decoded.get("utm") if isinstance(decoded, dict) else None
+        utm_source = utm_payload.get("source") if isinstance(utm_payload, dict) else None
+        if utm_source:
+            key = str(utm_source).strip().lower()
+            if not key:
+                continue
+            raw_utm_counts[key] = raw_utm_counts.get(key, 0) + int(getattr(r, "count", 0) or 0)
+
+    # Normalize into the requested four chips
+    chip_sources = ["twitter", "newsletter", "reddit"]
+    normalized: Dict[str, int] = {key: 0 for key in chip_sources}
+    other_total = 0
+    for source, count in raw_utm_counts.items():
+        if source in normalized:
+            normalized[source] += int(count or 0)
+        else:
+            other_total += int(count or 0)
+
+    utm_sources: List[Dict[str, Any]] = [
+        {"source": key, "count": int(normalized.get(key, 0))} for key in chip_sources
+    ]
+    utm_sources.append({"source": "other", "count": int(other_total)})
+
+    return {
+        "by_day_clicks": by_day_clicks,
+        "by_day_active_routes": by_day_active_routes,
+        "utm_sources": utm_sources,
+    }
+
+
 @router.get("/routes/{route_id}/stats")
 def get_route_stats(route_id: int, request: Request, days: int = 7, db: Session = Depends(get_db)) -> Dict[str, Any]:
     user = _require_user(request, db)

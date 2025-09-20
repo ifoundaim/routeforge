@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
-import { Header } from '../components/Header'
 import { Sparkline, buildSparklineSeries } from '../components/Sparkline'
 import { UTMChips, type UTMSource } from '../components/UTMChips'
 import { ToastShelf, useToastQueue } from '../components/Toast'
@@ -257,13 +256,10 @@ export function RouteDetail() {
 
   if (routeLoading && routeId === null) {
     return (
-      <div className="container">
-        <Header />
-        <main style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 24 }}>
-          <section className="card" style={{ padding: 20 }}>
-            <div className="muted">Loading route…</div>
-          </section>
-        </main>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <section className="card" style={{ padding: 20 }}>
+          <div className="muted">Loading route…</div>
+        </section>
         <ToastShelf items={toastItems} onDismiss={removeToast} />
       </div>
     )
@@ -271,13 +267,10 @@ export function RouteDetail() {
 
   if (routeErrorMessage) {
     return (
-      <div className="container">
-        <Header />
-        <main style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 24 }}>
-          <section className="card" style={{ padding: 20 }}>
-            <div className="muted">{routeErrorMessage}</div>
-          </section>
-        </main>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <section className="card" style={{ padding: 20 }}>
+          <div className="muted">{routeErrorMessage}</div>
+        </section>
         <ToastShelf items={toastItems} onDismiss={removeToast} />
       </div>
     )
@@ -335,9 +328,7 @@ export function RouteDetail() {
   const sparklineLoading = stats.loading
 
   return (
-    <div className="container">
-      <Header />
-      <main style={{ display: 'flex', flexDirection: 'column', gap: 24, marginTop: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         <section className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="row" style={{ alignItems: 'center', gap: 12 }}>
             <div className="heading" style={{ margin: 0, flex: 1 }}>{title}</div>
@@ -391,7 +382,6 @@ export function RouteDetail() {
           <div className="heading" style={{ margin: 0, fontSize: 18 }}>Recent hits</div>
           {renderHits()}
         </section>
-      </main>
       <ToastShelf items={toastItems} onDismiss={removeToast} />
     </div>
   )

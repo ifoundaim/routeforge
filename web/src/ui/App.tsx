@@ -3,8 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 
 import { UpgradeModal } from '../features/billing/UpgradeModal'
 import { useEntitlements } from '../features/billing/useEntitlements'
-import { Header } from '../components/Header'
-import { AppLayout } from '../pages/AppLayout'
+import { AppLayout } from './AppLayout'
 import { Dashboard } from '../pages/Dashboard'
 import { RouteDetail as RouteDetailPage } from '../pages/RouteDetail'
 import { SettingsWebhooks } from '../pages/SettingsWebhooks'
