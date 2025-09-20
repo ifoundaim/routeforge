@@ -3,18 +3,21 @@
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: var(--panel);
-  border-bottom: 1px solid #1f2937;
+  background: #0f172a !important;
+  border-bottom: 3px solid #3b82f6 !important;
   position: sticky;
   top: 0;
   z-index: 20;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
 }
 
 .app-header__brand {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  color: #ffffff !important;
   text-decoration: none;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+  letter-spacing: -0.5px !important;
 }
 
 .app-header__spacer {
@@ -39,7 +42,8 @@
 
 .app-header__status {
   font-size: 14px;
-  color: var(--muted);
+  color: var(--text);
+  opacity: 0.8;
 }
 
 .app-header__error {
@@ -47,7 +51,8 @@
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: var(--muted);
+  color: var(--text);
+  opacity: 0.9;
 }
 
 .account-menu {
@@ -58,12 +63,14 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: transparent;
-  border: 1px solid #1f2937;
+  background: #1e40af !important;
+  border: 2px solid #3b82f6 !important;
   border-radius: 999px;
-  padding: 8px 14px;
-  color: var(--text);
+  padding: 10px 16px;
+  color: #ffffff !important;
   font-size: 14px;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
 }
 
 .account-menu__trigger:focus {
@@ -72,11 +79,13 @@
 }
 
 .account-menu__label {
-  font-weight: 500;
+  font-weight: 700 !important;
+  color: #ffffff !important;
 }
 
 .account-menu__email {
-  color: var(--muted);
+  color: #e2e8f0 !important;
+  font-weight: 600 !important;
 }
 
 .account-menu__caret {

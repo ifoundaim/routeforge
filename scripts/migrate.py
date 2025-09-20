@@ -32,8 +32,11 @@ def main():
         raise SystemExit("TIDB_DSN not provided. Use --dsn or set env TIDB_DSN.")
 
     engine = get_engine(dsn)
-    logger.info("Ensuring base tables via SQLAlchemy metadata...")
-    Base.metadata.create_all(engine)
+    try:
+        logger.info("Ensuring base tables via SQLAlchemy metadata...")
+        Base.metadata.create_all(engine)
+    except Exception as e:
+        logger.warning("Skipping Base.metadata.create_all due to error: %s", e)
     logger.info("Running accounts migration (users + user_id backfill)...")
     migrate_accounts(dsn)
 

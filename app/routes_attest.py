@@ -33,6 +33,10 @@ class AttestResponse(BaseModel):
     metadata_uri: Optional[str] = None
     token_id: Optional[int] = None
     mode: Literal["demo", "testnet", "off"]
+    # Expose key metadata fields for validation tooling (demo/testnet parity)
+    artifact_sha256: Optional[str] = None
+    license_code: Optional[str] = None
+    evidence_uri: Optional[str] = None
 
 
 class DemoModeResponse(BaseModel):
@@ -169,6 +173,9 @@ def attest_release(release_id: int, payload: AttestRequest, request: Request) ->
         metadata_uri=result.metadata_uri,
         token_id=result.token_id,
         mode=result.mode,
+        artifact_sha256=metadata.get("artifact_sha256"),
+        license_code=metadata.get("license_code"),
+        evidence_uri=metadata.get("evidence_uri"),
     )
 
 
