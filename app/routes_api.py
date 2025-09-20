@@ -265,7 +265,7 @@ def create_route(payload: schemas.RouteCreate, request: Request, db: Session = D
 
 
 @router.get("/routes")
-def get_route_by_slug(slug: Optional[str] = None, request: Request = None, db: Session = Depends(get_db)):
+def get_route_by_slug(slug: Optional[str] = None, id: Optional[int] = None, request: Request = None, db: Session = Depends(get_db)):
     """Lookup a route by slug for the current user.
 
     Frontend uses this to resolve `id` and target when navigating by slug.
@@ -278,17 +278,30 @@ def get_route_by_slug(slug: Optional[str] = None, request: Request = None, db: S
     if failure is not None:
         return failure
 
-    if not slug or not isinstance(slug, str):
-        return error(request, "invalid_slug", status_code=422, detail="Missing or invalid slug.")
-
-    sanitized = slugify(slug.strip())
-    route = (
-        db.execute(
-            select(models.Route)
-            .where(models.Route.slug == sanitized, models.Route.user_id == current_user_id)
-            .limit(1)
-        ).scalar_one_or_none()
-    )
+    route = None
+    if slug:
+        if not isinstance(slug, str):
+            return error(request, "invalid_slug", status_code=422, detail="Missing or invalid slug.")
+        sanitized = slugify(slug.strip())
+        route = (
+            db.execute(
+                select(models.Route)
+                .where(models.Route.slug == sanitized, models.Route.user_id == current_user_id)
+                .limit(1)
+            ).scalar_one_or_none()
+        )
+    elif id is not None:
+        try:
+            route_id = int(id)
+        except Exception:
+            return error(request, "invalid_route_id", status_code=422)
+        r = db.get(models.Route, route_id)
+        if r is not None and int(r.user_id) == int(current_user_id):
+            route = r
+        else:
+            route = None
+    else:
+        return error(request, "invalid_request", status_code=422, detail="Provide slug or id")
     if route is None:
         return error(request, "not_found", status_code=404)
 
